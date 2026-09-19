@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from time import monotonic
 from typing import Any
 
+from tracking.avf_camera import AVFCamera, CameraError, CameraNotStarted
 from tracking.features import FaceFeatureExtractor, FeatureConfig, Point
 from tracking.frames import FEATURE_UNITS, MovementFeature, MovementFrame
 from tracking.mac_camera import refuse_if_phone, resolve_mac_camera
@@ -52,6 +53,7 @@ class WebcamFaceTracker:
         self._landmarker: Any | None = None
         self._capture: Any | None = None
         self._mp: Any | None = None
+        self._last_read_error: str | None = None
 
     def __enter__(self) -> "WebcamFaceTracker":
         self.start()
@@ -80,18 +82,23 @@ class WebcamFaceTracker:
         self.camera_name = chosen.name
         self.camera_unique_id = chosen.unique_id
         self.opened_camera_name = chosen.name
-        # Open only the named Mac index. Never probe other indexes / Continuity.
-        backend = getattr(cv2, "CAP_AVFOUNDATION", 0)
-        self._capture = cv2.VideoCapture(int(chosen.index), backend)
-        self._capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        if not self._capture.isOpened():
-            raise RuntimeError(
-                f"Could not open Mac camera index={chosen.index} name={chosen.name!r}"
-            )
+        # Open only the named Mac camera. Never probe other devices / Continuity.
+        # This uses our own AVFoundation session rather than cv2.VideoCapture:
+        # OpenCV's macOS backend races on the pixel buffer between its delegate
+        # thread and the reader, which segfaulted this process repeatedly. See
+        # tracking/avf_camera.py.
+        self._capture = AVFCamera(unique_id=chosen.unique_id, name=chosen.name)
+        self._capture.start()
+        if not self._capture.is_open:
+            # __exit__ never runs when __enter__ raises, so tear the session
+            # down here rather than leaving it running with a live delegate.
+            self._capture.stop()
+            self._capture = None
+            raise RuntimeError(f"Could not open Mac camera name={chosen.name!r}")
 
     def stop(self) -> None:
         if self._capture is not None:
-            self._capture.release()
+            self._capture.stop()
             self._capture = None
         if self._face_mesh is not None:
             self._face_mesh.close()
@@ -116,7 +123,9 @@ class WebcamFaceTracker:
         while True:
             frame = self._read_fresh_frame()
             if frame is None:
-                yield WebcamTrackingFrame(None, _invalid_frame("camera_read_failed"))
+                reason = self._last_read_error or "camera_read_failed"
+                self._last_read_error = None
+                yield WebcamTrackingFrame(None, _invalid_frame(reason))
                 continue
 
             frame = self._resize(frame)
@@ -134,15 +143,23 @@ class WebcamFaceTracker:
     def _read_fresh_frame(self) -> Any | None:
         """Read one fresh frame.
 
-        `read()` grabs, retrieves and decodes, so calling it repeatedly to drain
-        stale frames costs a full decode each time. Draining three deep capped
-        the pipeline at 10 fps (100ms per frame) on an M2. `CAP_PROP_BUFFERSIZE`
-        is already set to 1 in `start()`, which keeps the queue shallow, so one
-        read is both fresh and three times faster (33ms per frame).
+        The capture session keeps only the newest frame and discards late ones,
+        so a single read is always current — there is no stale queue to drain.
+        `read()` blocks until a frame the caller has not seen arrives.
         """
 
         assert self._capture is not None
-        ok, frame = self._capture.read()
+        try:
+            ok, frame = self._capture.read()
+        except CameraNotStarted:
+            # Not a bad frame — the session is gone (e.g. stopped from another
+            # thread). Retrying would spin, so let it end the loop.
+            raise
+        except CameraError as exc:
+            # One bad frame must not end a match. Report it as the reason on an
+            # invalid frame rather than swallowing it, and keep capturing.
+            self._last_read_error = str(exc)
+            return None
         if not ok:
             return None
         return frame

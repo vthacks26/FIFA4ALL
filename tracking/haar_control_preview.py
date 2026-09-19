@@ -28,10 +28,17 @@ def main() -> int:
 
     face_cascade = cv2.CascadeClassifier(str(cascade_path))
     nose_cascade = cv2.CascadeClassifier(str(nose_cascade_path))
-    capture = cv2.VideoCapture(0)
-    capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-    if not capture.isOpened():
-        print("Could not open camera index 0. Check macOS camera permission for the terminal/Codex host.")
+    # Not cv2.VideoCapture: OpenCV's macOS backend races on the pixel buffer and
+    # segfaults. See tracking/avf_camera.py.
+    from tracking.avf_camera import AVFCamera, CameraError, CameraNotStarted
+    from tracking.mac_camera import resolve_mac_camera
+
+    chosen = resolve_mac_camera()
+    capture = AVFCamera(unique_id=chosen.unique_id, name=chosen.name)
+    capture.start()
+    if not capture.is_open:
+        capture.stop()  # never leave a half-open session behind
+        print(f"Could not open camera {chosen.name!r}. Check macOS camera permission for the terminal/Codex host.")
         return 2
 
     neutral: NeutralNose | None = None
@@ -41,10 +48,19 @@ def main() -> int:
 
     try:
         while True:
-            ok, frame = capture.read()
-            if not ok:
-                print("\nCamera read failed.")
+            try:
+                ok, frame = capture.read()
+            except CameraNotStarted:
+                print("\nCamera stopped.")
                 return 2
+            except CameraError as exc:
+                # A single bad frame is not fatal to a preview; keep going.
+                print(f"\n{exc}")
+                continue
+            if not ok:
+                # A read timeout means no frame arrived in time, not that the
+                # camera died. Retry rather than ending the preview.
+                continue
 
             frame = _resize(cv2, frame, 640)
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -107,7 +123,7 @@ def main() -> int:
             if key == ord("r"):
                 neutral = None
     finally:
-        capture.release()
+        capture.stop()
         cv2.destroyAllWindows()
 
 

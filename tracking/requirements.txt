@@ -5,3 +5,7 @@
 mediapipe==0.10.14
 opencv-python>=4.11,<5
 numpy>=1.26,<2
+# Camera capture runs through our own AVFoundation session, not OpenCV, whose
+# macOS backend races on the pixel buffer and segfaults. See tracking/avf_camera.py.
+pyobjc-framework-AVFoundation>=11
+pyobjc-framework-libdispatch>=11
