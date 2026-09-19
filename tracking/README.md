@@ -62,6 +62,8 @@ It displays suggested labels only:
 - mouth open: `Space`
 - left wink: `L`
 
+`Space` remains active while the mouth stays above the open threshold. The preview also shows `space hold` seconds and a capped charge percentage so the input adapter can later translate a longer mouth-open hold into a longer in-game shot press.
+
 These are temporary preview labels for tracking validation. Person 3 still owns real input adapters and action assignment.
 
 On macOS, the first run may trigger a camera permission prompt. If the preview cannot open camera index `0`, grant camera access to the terminal or Codex host in System Settings, then rerun the command.

@@ -21,6 +21,20 @@ class PreviewThresholds:
     head_tilt_down: float = 8.0
     mouth_open: float = 0.09
     left_wink: float = 0.025
+    full_space_charge_seconds: float = 1.25
+
+
+@dataclass
+class HoldState:
+    started_at: float | None = None
+
+    def update(self, active: bool, now: float) -> float:
+        if not active:
+            self.started_at = None
+            return 0.0
+        if self.started_at is None:
+            self.started_at = now
+        return now - self.started_at
 
 
 def suggested_keys(features: dict[str, float], thresholds: PreviewThresholds) -> list[str]:
@@ -46,6 +60,7 @@ def main() -> int:
     import cv2  # type: ignore[import-not-found]
 
     thresholds = PreviewThresholds()
+    space_hold = HoldState()
     fps_samples: deque[float] = deque(maxlen=30)
     last_time = monotonic()
 
@@ -75,13 +90,18 @@ def main() -> int:
                     if feature.available and feature.value is not None
                 }
                 keys = suggested_keys(values, thresholds)
+                space_hold_seconds = space_hold.update("Space" in keys, now)
             else:
                 values = {}
                 keys = []
+                space_hold_seconds = space_hold.update(False, now)
+
+            space_charge = min(space_hold_seconds / thresholds.full_space_charge_seconds, 1.0)
 
             lines = [
                 f"tracking: {'valid' if tracked.movement.tracking_valid else 'lost'}",
                 f"preview keys: {', '.join(keys) if keys else '-'}",
+                f"space hold: {space_hold_seconds:.2f}s ({space_charge * 100:.0f}%)",
                 f"rate: {sum(fps_samples) / max(len(fps_samples), 1):.1f} fps",
             ]
             for name in ["head_turn", "head_tilt", "mouth_opening", "left_wink"]:
@@ -89,7 +109,12 @@ def main() -> int:
                 lines.append(f"{name}: {'unavailable' if value is None else f'{value:.3f}'}")
 
             _draw_lines(cv2, frame, lines)
-            print(f"\rtracking={tracked.movement.tracking_valid} keys={'+'.join(keys) if keys else '-'}", end="")
+            print(
+                f"\rtracking={tracked.movement.tracking_valid} "
+                f"keys={'+'.join(keys) if keys else '-'} "
+                f"space_hold={space_hold_seconds:.2f}s",
+                end="",
+            )
             cv2.imshow("tracking control preview - press q to quit", frame)
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 print()
