@@ -57,7 +57,7 @@ MPLCONFIGDIR=.cache/matplotlib python -m tracking.control_preview
 
 It displays suggested labels only:
 
-- nose leaves the center deadzone left/right: `A` / `D`
+- nose leaves the center deadzone screen-left/screen-right: `D` / `A`
 - nose leaves the center deadzone up/down: `W` / `S`
 - mouth open: `Space`
 - left wink: `L`

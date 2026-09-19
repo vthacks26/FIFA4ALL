@@ -59,9 +59,9 @@ def suggested_keys(
 
     keys: list[str] = []
     if joystick_offset[0] <= -thresholds.joystick_deadzone_x:
-        keys.append("A")
-    if joystick_offset[0] >= thresholds.joystick_deadzone_x:
         keys.append("D")
+    if joystick_offset[0] >= thresholds.joystick_deadzone_x:
+        keys.append("A")
     if joystick_offset[1] <= -thresholds.joystick_deadzone_y:
         keys.append("W")
     if joystick_offset[1] >= thresholds.joystick_deadzone_y:
@@ -191,6 +191,8 @@ def _draw_joystick(
         int(thresholds.joystick_deadzone_x * width),
         int(thresholds.joystick_deadzone_y * height),
     )
+    cv2.line(frame, (0, center_px[1]), (width, center_px[1]), (255, 120, 40), 1)
+    cv2.line(frame, (center_px[0], 0), (center_px[0], height), (255, 120, 40), 1)
     cv2.rectangle(
         frame,
         (center_px[0] - deadzone_px[0], center_px[1] - deadzone_px[1]),
@@ -199,6 +201,10 @@ def _draw_joystick(
         2,
     )
     cv2.circle(frame, center_px, 4, (255, 120, 40), -1)
+    cv2.putText(frame, "W", (center_px[0] + 8, max(24, center_px[1] - deadzone_px[1] - 12)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 120, 40), 2, cv2.LINE_AA)
+    cv2.putText(frame, "S", (center_px[0] + 8, min(height - 12, center_px[1] + deadzone_px[1] + 28)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 120, 40), 2, cv2.LINE_AA)
+    cv2.putText(frame, "D", (max(8, center_px[0] - deadzone_px[0] - 30), center_px[1] - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 120, 40), 2, cv2.LINE_AA)
+    cv2.putText(frame, "A", (min(width - 28, center_px[0] + deadzone_px[0] + 10), center_px[1] - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 120, 40), 2, cv2.LINE_AA)
 
 
 def _draw_lines(cv2: object, frame: object, lines: list[str]) -> None:
