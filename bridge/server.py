@@ -271,12 +271,19 @@ def main() -> int:
     hub.start()
 
     mode = "mock" if args.mock else "webcam"
-    print(f"FIFA4ALL bridge ({mode}) on http://127.0.0.1:{args.port}")
-    print("  /config  /events  /stream.mjpg  POST /calibrate  POST /arm  POST /disarm")
-    print("  keyboard output starts DISARMED; arm it from the second monitor")
+    # Flushed explicitly: stdout is block-buffered when piped to a log file, and
+    # the operator must not miss the permission warning before a demo.
+    banner = [
+        f"FIFA4ALL bridge ({mode}) on http://127.0.0.1:{args.port}",
+        "  /config  /events  /stream.mjpg  POST /calibrate  POST /arm  POST /disarm",
+        "  keyboard output starts DISARMED; arm it from the second monitor",
+    ]
     problem = QuartzKeyboard.permission_error()
     if problem is not None:
-        print(f"\n  keyboard output unavailable:\n  {problem}\n")
+        banner += ["", "  keyboard output unavailable:", f"  {problem}", ""]
+    else:
+        banner.append("  keyboard output verified: synthetic keys reach macOS")
+    print("\n".join(banner), flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
