@@ -33,13 +33,13 @@ Always run the live module from the **repository root** so `python -m tracking.l
 
 ## Run
 
-One process starts Quartz inject and the orientation website. With `--preview` it also opens that website in your default browser and shows a **separate** native camera overlay. You do **not** need `npm run dev`. The two UIs stay split: website chrome never moves into the look-axis window.
+One process starts Quartz inject and the orientation website. With `--preview` it waits until that UI is **listening**, then opens the Welcome page and shows a **separate** native camera overlay. On macOS this uses `/usr/bin/open http://127.0.0.1:8765/` (Python's `webbrowser.open` often no-ops and never raises a window). If open fails, the process prints a line with that URL so you can click it. You do **not** need `npm run dev`. The two UIs stay split: website chrome never moves into the look-axis window.
 
 ```bash
 MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --preview
 ```
 
-That auto-opens **http://127.0.0.1:8765/** — Welcome, then the pushed onboarding / practice / live-telemetry flow (`WELCOME` → drills → `LIVE_TELEMETRY`). Same process serves every later orientation route from that origin.
+That auto-opens **http://127.0.0.1:8765/** — Welcome, then the pushed onboarding / practice / live-telemetry flow (`WELCOME` → drills → `LIVE_TELEMETRY`). Same process serves every later orientation route from that origin. Pull this branch before retrying if `--preview` only printed that it was running.
 
 Headless inject (same mapping and UI server, **no** overlay and **no** browser — so Luna can keep keyboard focus):
 
@@ -77,7 +77,7 @@ The first valid nose point after start or Reset is the joystick center. Returnin
 
 | Window | What it is |
 | --- | --- |
-| Default browser → **http://127.0.0.1:8765/** | Orientation website: Welcome, controls, Find your center, practice drills, live telemetry, **Reset center**. Website chrome lives only here. |
+| Default browser → **http://127.0.0.1:8765/** | Orientation website: Welcome, controls, Find your center, practice drills, live telemetry, **Reset center**. Website chrome lives only here. macOS `--preview` launches this with `/usr/bin/open` after the UI is listening. |
 | Native **`FIFA4ALL look axis`** | Camera / vision overlay only: mirrored MacBook frame, face landmarks, WASD look-axis, current keys, orange **RESET**. No onboarding chrome. |
 
 `--no-preview` does not open a browser, because raising a window would steal keyboard focus from Luna.
@@ -119,10 +119,11 @@ More tracking notes: [`tracking/README.md`](tracking/README.md). Orientation scr
 
 `python -m tracking.live` is the only match path. The same process owns the
 MacBook camera, Quartz HID holds, the look-axis overlay + RESET, and the
-orientation website at http://127.0.0.1:8765/ . `--preview` auto-opens that
-website (onboarding / practice / live HUD) and keeps the camera overlay as a
-separate vision window. Do not start `bridge.server` or `npm run dev` for a
-match — that would be a second, disconnected stack.
+orientation website at http://127.0.0.1:8765/ . `--preview` waits until that
+server answers `GET /`, then on macOS runs `/usr/bin/open` on the Welcome URL
+and keeps the camera overlay as a separate vision window. Do not start
+`bridge.server` or `npm run dev` for a match — that would be a second,
+disconnected stack.
 
 ```bash
 MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --preview

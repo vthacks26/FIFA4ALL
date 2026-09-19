@@ -28,10 +28,12 @@ The live product already serves this UI. From the repository root:
 MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --preview
 ```
 
-That auto-opens **http://127.0.0.1:8765/** (Welcome → practice → live HUD) in
-your default browser. Drag that window to the second monitor. The native
-look-axis overlay stays a **separate** camera/vision window — website chrome
-is not drawn there. Same MacBook camera and Quartz holds. Do not start
+That waits until the UI is listening, then opens **http://127.0.0.1:8765/**
+(Welcome → practice → live HUD). On macOS that is `/usr/bin/open` on that
+URL (`webbrowser.open` often no-ops). If open fails, the log prints the URL
+to click. Drag that window to the second monitor. The native look-axis
+overlay stays a **separate** camera/vision window — website chrome is not
+drawn there. Same MacBook camera and Quartz holds. Do not start
 `npm run dev` and do not start a second camera.
 
 `--no-preview` still serves the same URL (inject + UI server) but does **not**

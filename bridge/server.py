@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import subprocess
 import sys
 import threading
 import urllib.error
@@ -39,6 +40,7 @@ from tracking.controls import DIRECTION_KEYS
 
 DEFAULT_PORT = 8765
 UI_DIST = Path(__file__).resolve().parent.parent / "onboarding" / "dist"
+MACOS_OPEN = "/usr/bin/open"
 
 
 def orientation_ui_url(port: int = DEFAULT_PORT) -> str:
@@ -47,14 +49,16 @@ def orientation_ui_url(port: int = DEFAULT_PORT) -> str:
     return f"http://127.0.0.1:{port}/"
 
 
-def wait_until_serving(port: int, timeout: float = 2.0) -> bool:
+def wait_until_serving(port: int, timeout: float = 5.0) -> bool:
     """True once GET / answers, so the first browser load is not connection-refused."""
 
     url = orientation_ui_url(port)
+    # Bypass HTTP(S)_PROXY so a machine proxy cannot hide localhost.
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     deadline = monotonic() + timeout
     while monotonic() < deadline:
         try:
-            with urllib.request.urlopen(url, timeout=0.25):
+            with opener.open(url, timeout=0.25):
                 return True
         except urllib.error.HTTPError:
             return True  # server answered (missing dist is still "up")
@@ -63,23 +67,94 @@ def wait_until_serving(port: int, timeout: float = 2.0) -> bool:
     return False
 
 
-def open_orientation_ui(port: int = DEFAULT_PORT) -> bool:
-    """Open the intro page in the user's default browser.
+def macos_open_bin() -> str | None:
+    """Return ``/usr/bin/open`` on macOS when that helper exists."""
 
-    Returns True if the platform accepted the open request.
+    if sys.platform != "darwin":
+        return None
+    return MACOS_OPEN if Path(MACOS_OPEN).is_file() else None
+
+
+def _open_with_macos_open(url: str, opener: str) -> tuple[bool, str | None]:
+    """Launch *url* with macOS ``open(1)``. ``webbrowser.open`` often no-ops here."""
+
+    try:
+        completed = subprocess.run(
+            [opener, url],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except Exception as exc:
+        return (False, f"{opener}: {exc}")
+    if completed.returncode == 0:
+        return (True, None)
+    detail = (completed.stderr or completed.stdout or "").strip()
+    reason = f"{opener} exited {completed.returncode}"
+    if detail:
+        reason = f"{reason}: {detail}"
+    return (False, reason)
+
+
+def _open_with_webbrowser(url: str) -> tuple[bool, str | None]:
+    try:
+        if webbrowser.open(url, new=1, autoraise=True):
+            return (True, None)
+        return (False, "webbrowser.open returned False")
+    except Exception as exc:
+        return (False, f"webbrowser.open: {exc}")
+
+
+def open_url_in_default_browser(url: str) -> tuple[bool, str | None]:
+    """Open *url* in the default browser.
+
+    On macOS prefer ``/usr/bin/open <url>``. Python's ``webbrowser.open`` often
+    returns True (or False) without actually launching a window.
+    """
+
+    opener = macos_open_bin()
+    if opener is not None:
+        opened, reason = _open_with_macos_open(url, opener)
+        if opened:
+            return (True, opener)
+        fallback_ok, fallback_reason = _open_with_webbrowser(url)
+        if fallback_ok:
+            return (True, "webbrowser")
+        parts = [part for part in (reason, fallback_reason) if part]
+        return (False, "; ".join(parts) or "unknown error")
+    opened, reason = _open_with_webbrowser(url)
+    return (opened, None if opened else (reason or "unknown error"))
+
+
+def open_orientation_ui(port: int = DEFAULT_PORT) -> bool:
+    """Open the Welcome / intro page after the UI server is listening.
+
+    Returns True if the platform accepted the open request. Never raises:
+    a failed open must not take down inject.
     """
 
     url = orientation_ui_url(port)
     try:
-        opened = bool(webbrowser.open(url, new=1, autoraise=True))
+        opened, detail = open_url_in_default_browser(url)
     except Exception as exc:  # never fail the live product over a browser helper
-        print(f"Could not open a browser ({exc}). Open {url} yourself.", flush=True)
+        print(
+            f"Could not open the orientation UI automatically ({exc}). "
+            f"Open {url} in your browser.",
+            flush=True,
+        )
         return False
     if opened:
-        print(f"Opened orientation UI in your default browser: {url}", flush=True)
-    else:
-        print(f"Open the orientation UI: {url}", flush=True)
-    return opened
+        how = "with /usr/bin/open" if detail == MACOS_OPEN else "in your default browser"
+        print(f"Opened the orientation Welcome page {how}: {url}", flush=True)
+        return True
+    reason = detail or "unknown error"
+    print(
+        f"Could not open the orientation UI automatically ({reason}). "
+        f"Open {url} in your browser.",
+        flush=True,
+    )
+    return False
 
 
 def maybe_open_orientation_ui(*, preview: bool, port: int) -> bool:
@@ -423,8 +498,8 @@ def run_product(
     ]
     if preview:
         banner.append(
-            "  --preview opens the orientation website in your default browser "
-            "(Welcome → practice). The look-axis window stays a separate "
+            "  --preview waits until the UI is listening, then opens the Welcome "
+            "page (macOS: /usr/bin/open). The look-axis window stays a separate "
             "camera/vision overlay — not website chrome. No npm run dev."
         )
     else:
@@ -441,8 +516,15 @@ def run_product(
 
     threading.Thread(target=server.serve_forever, name="bridge-http", daemon=True).start()
     if preview:
-        wait_until_serving(bound_port)
-    maybe_open_orientation_ui(preview=preview, port=bound_port)
+        ready = wait_until_serving(bound_port)
+        if not ready:
+            print(
+                f"Could not confirm the orientation UI is listening at {intro}. "
+                f"Open {intro} in your browser once it is up.",
+                flush=True,
+            )
+        else:
+            maybe_open_orientation_ui(preview=True, port=bound_port)
     try:
         hub.run(on_frame=_build_overlay(hub) if preview else None)
     except KeyboardInterrupt:
@@ -464,8 +546,8 @@ def main(argv: list[str] | None = None) -> int:
         "--preview",
         action="store_true",
         help=(
-            "open the orientation website in the default browser and show the "
-            "separate camera/vision look-axis overlay"
+            "after the UI is listening, open the Welcome page "
+            "(macOS: /usr/bin/open) and show the separate camera overlay"
         ),
     )
     parser.add_argument(

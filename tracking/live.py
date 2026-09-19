@@ -188,8 +188,8 @@ def main(argv: list[str] | None = None) -> int:
         "--preview",
         action="store_true",
         help=(
-            "open the orientation website in your default browser and show the "
-            "separate camera/vision look-axis overlay"
+            "after the UI is listening, open the Welcome page "
+            "(macOS: /usr/bin/open) and show the separate camera overlay"
         ),
     )
     parser.add_argument(

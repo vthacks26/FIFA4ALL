@@ -239,44 +239,127 @@ class OrientationLaunchTests(unittest.TestCase):
 
         from bridge.server import maybe_open_orientation_ui
 
-        with patch("bridge.server.webbrowser.open", return_value=True) as opened:
-            self.assertTrue(maybe_open_orientation_ui(preview=True, port=8765))
+        with patch("bridge.server.macos_open_bin", return_value=None):
+            with patch("bridge.server.webbrowser.open", return_value=True) as opened:
+                self.assertTrue(maybe_open_orientation_ui(preview=True, port=8765))
         opened.assert_called_once_with("http://127.0.0.1:8765/", new=1, autoraise=True)
+
+    def test_macos_preview_uses_usr_bin_open(self) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from bridge.server import maybe_open_orientation_ui
+
+        completed = SimpleNamespace(returncode=0, stdout="", stderr="")
+        with patch("bridge.server.macos_open_bin", return_value="/usr/bin/open"):
+            with patch("bridge.server.subprocess.run", return_value=completed) as run:
+                with patch("bridge.server.webbrowser.open") as webbrowser_open:
+                    self.assertTrue(maybe_open_orientation_ui(preview=True, port=8765))
+        run.assert_called_once()
+        self.assertEqual(
+            run.call_args[0][0],
+            ["/usr/bin/open", "http://127.0.0.1:8765/"],
+        )
+        webbrowser_open.assert_not_called()
+
+    def test_macos_open_failure_prints_clickable_url(self) -> None:
+        import io
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from bridge.server import maybe_open_orientation_ui
+
+        completed = SimpleNamespace(
+            returncode=1, stdout="", stderr="LSOpenURLsWithRole() failed"
+        )
+        buf = io.StringIO()
+        with patch("bridge.server.macos_open_bin", return_value="/usr/bin/open"):
+            with patch("bridge.server.subprocess.run", return_value=completed):
+                with patch("bridge.server.webbrowser.open", return_value=False):
+                    with patch("sys.stdout", buf):
+                        self.assertFalse(
+                            maybe_open_orientation_ui(preview=True, port=8765)
+                        )
+        logged = buf.getvalue()
+        self.assertIn("Could not open the orientation UI automatically", logged)
+        self.assertIn("http://127.0.0.1:8765/", logged)
+        self.assertIn("Open http://127.0.0.1:8765/ in your browser", logged)
 
     def test_no_preview_does_not_open_browser(self) -> None:
         from unittest.mock import patch
 
         from bridge.server import maybe_open_orientation_ui
 
-        with patch("bridge.server.webbrowser.open") as opened:
-            self.assertFalse(maybe_open_orientation_ui(preview=False, port=8765))
+        with patch("bridge.server.macos_open_bin", return_value="/usr/bin/open"):
+            with patch("bridge.server.subprocess.run") as run:
+                with patch("bridge.server.webbrowser.open") as opened:
+                    self.assertFalse(maybe_open_orientation_ui(preview=False, port=8765))
         opened.assert_not_called()
+        run.assert_not_called()
 
     def test_run_product_preview_opens_browser_without_webcam(self) -> None:
         from unittest.mock import patch
 
         from bridge.server import ControlHub, run_product
 
-        with patch("bridge.server.webbrowser.open", return_value=True) as opened:
-            with patch.object(ControlHub, "run", return_value=None):
-                with patch("bridge.server._build_overlay", return_value=None):
-                    code = run_product(preview=True, mock=True, port=0, armed=False)
+        with patch("bridge.server.macos_open_bin", return_value=None):
+            with patch("bridge.server.webbrowser.open", return_value=True) as opened:
+                with patch.object(ControlHub, "run", return_value=None):
+                    with patch("bridge.server._build_overlay", return_value=None):
+                        code = run_product(preview=True, mock=True, port=0, armed=False)
         self.assertEqual(code, 0)
         opened.assert_called_once()
         url = opened.call_args[0][0]
         self.assertTrue(url.startswith("http://127.0.0.1:"))
         self.assertTrue(url.endswith("/"))
 
+    def test_run_product_preview_waits_then_uses_macos_open(self) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from bridge.server import ControlHub, run_product
+
+        order: list[str] = []
+        completed = SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        def wait(port: int, timeout: float = 5.0) -> bool:
+            order.append("wait")
+            return True
+
+        def run_open(*_args: object, **_kwargs: object) -> SimpleNamespace:
+            order.append("open")
+            return completed
+
+        with patch("bridge.server.wait_until_serving", side_effect=wait):
+            with patch("bridge.server.macos_open_bin", return_value="/usr/bin/open"):
+                with patch("bridge.server.subprocess.run", side_effect=run_open) as run:
+                    with patch("bridge.server.webbrowser.open") as webbrowser_open:
+                        with patch.object(ControlHub, "run", return_value=None):
+                            with patch("bridge.server._build_overlay", return_value=None):
+                                code = run_product(
+                                    preview=True, mock=True, port=0, armed=False
+                                )
+        self.assertEqual(code, 0)
+        self.assertEqual(order, ["wait", "open"])
+        webbrowser_open.assert_not_called()
+        argv = run.call_args[0][0]
+        self.assertEqual(argv[0], "/usr/bin/open")
+        self.assertTrue(argv[1].startswith("http://127.0.0.1:"))
+        self.assertTrue(argv[1].endswith("/"))
+
     def test_run_product_no_preview_serves_ui_without_opening_browser(self) -> None:
         from unittest.mock import patch
 
         from bridge.server import ControlHub, run_product
 
-        with patch("bridge.server.webbrowser.open") as opened:
-            with patch.object(ControlHub, "run", return_value=None):
-                code = run_product(preview=False, mock=True, port=0, armed=False)
+        with patch("bridge.server.macos_open_bin", return_value="/usr/bin/open"):
+            with patch("bridge.server.subprocess.run") as run:
+                with patch("bridge.server.webbrowser.open") as opened:
+                    with patch.object(ControlHub, "run", return_value=None):
+                        code = run_product(preview=False, mock=True, port=0, armed=False)
         self.assertEqual(code, 0)
         opened.assert_not_called()
+        run.assert_not_called()
 
     def test_preview_opens_website_and_keeps_overlay_separate(self) -> None:
         """Browser gets the site; overlay is a different native callback."""
@@ -285,14 +368,42 @@ class OrientationLaunchTests(unittest.TestCase):
 
         from bridge.server import ControlHub, run_product
 
-        with patch("bridge.server.webbrowser.open", return_value=True) as opened:
-            with patch.object(ControlHub, "run", return_value=None) as hub_run:
-                with patch("bridge.server._build_overlay", return_value="overlay-cb") as build:
-                    code = run_product(preview=True, mock=True, port=0, armed=False)
+        with patch("bridge.server.macos_open_bin", return_value=None):
+            with patch("bridge.server.webbrowser.open", return_value=True) as opened:
+                with patch.object(ControlHub, "run", return_value=None) as hub_run:
+                    with patch(
+                        "bridge.server._build_overlay", return_value="overlay-cb"
+                    ) as build:
+                        code = run_product(preview=True, mock=True, port=0, armed=False)
         self.assertEqual(code, 0)
         opened.assert_called_once()
         build.assert_called_once()
         hub_run.assert_called_once_with(on_frame="overlay-cb")
+
+    def test_run_product_logs_url_when_ui_never_listens(self) -> None:
+        import io
+        from unittest.mock import patch
+
+        from bridge.server import ControlHub, run_product
+
+        buf = io.StringIO()
+        with patch("bridge.server.wait_until_serving", return_value=False):
+            with patch("bridge.server.macos_open_bin", return_value="/usr/bin/open"):
+                with patch("bridge.server.subprocess.run") as run:
+                    with patch("bridge.server.webbrowser.open") as opened:
+                        with patch.object(ControlHub, "run", return_value=None):
+                            with patch("bridge.server._build_overlay", return_value=None):
+                                with patch("sys.stdout", buf):
+                                    code = run_product(
+                                        preview=True, mock=True, port=0, armed=False
+                                    )
+        self.assertEqual(code, 0)
+        run.assert_not_called()
+        opened.assert_not_called()
+        logged = buf.getvalue()
+        self.assertIn("Could not confirm the orientation UI is listening", logged)
+        self.assertIn("http://127.0.0.1:", logged)
+        self.assertIn("Open ", logged)
 
 
 class OverlayStaysSeparateTests(unittest.TestCase):
