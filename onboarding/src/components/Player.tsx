@@ -21,13 +21,27 @@ export type PlayerPose = "idle" | "run" | "shoot" | "pass" | "receive" | "celebr
 /** Each kit is a distinct character from the reference sheet. */
 export type PlayerKit = "lime" | "teal" | "purple" | "amber" | "crimson" | "slate";
 
-const SPRITE_INDEX: Record<PlayerKit, number> = {
+const FRONT_INDEX: Record<PlayerKit, number> = {
   crimson: 1,
   lime: 2,
   amber: 3,
   slate: 4,
   teal: 5,
   purple: 6,
+};
+
+/**
+ * The back reference sheet lists the same six players in reverse order, so the
+ * indices do not line up with the front sheet. Without this the player changes
+ * identity the moment they turn to run north.
+ */
+const BACK_INDEX: Record<PlayerKit, number> = {
+  crimson: 6,
+  lime: 5,
+  amber: 4,
+  slate: 3,
+  teal: 2,
+  purple: 1,
 };
 
 export type Facing = "N" | "NE" | "E" | "SE" | "S" | "SW" | "W" | "NW";
@@ -53,7 +67,9 @@ const YAW: Record<Facing, number> = {
 };
 
 export function Player({ pose = "idle", kit = "lime", size = 220, facing = null }: PlayerProps) {
-  const view = facing !== null && AWAY.has(facing) ? "back" : "front";
+  const away = facing !== null && AWAY.has(facing);
+  const view = away ? "back" : "front";
+  const index = away ? BACK_INDEX[kit] : FRONT_INDEX[kit];
   const mirrored = facing !== null && MIRRORED.has(facing);
   const yaw = facing === null ? 0 : YAW[facing];
 
@@ -65,7 +81,7 @@ export function Player({ pose = "idle", kit = "lime", size = 220, facing = null 
     >
       <img
         className="player__sprite"
-        src={`${import.meta.env.BASE_URL}players/${view}-${SPRITE_INDEX[kit]}.png`}
+        src={`${import.meta.env.BASE_URL}players/${view}-${index}.png`}
         alt=""
         draggable={false}
       />

@@ -100,6 +100,10 @@ class ControlHub:
                     self._lock.notify_all()
                 if on_frame is not None:
                     on_frame(state)
+            # Reaching here means the source stopped yielding. The bridge ends
+            # with it, so say so rather than exiting without a word.
+            if not self._stopped:
+                print("capture source ended; bridge is stopping", flush=True)
         except Exception as exc:  # surfaced to the UI instead of dying silently
             # Also print it: the capture loop ending stops the whole bridge, and
             # an operator watching the console should not have to attach an SSE
