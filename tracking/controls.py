@@ -70,12 +70,13 @@ class ControlThresholds:
     mouth_min_gap: float = 0.030
     wink_on: float = 0.025
     wink_off: float = 0.015
-    # Tongue-out recentres pose (same ControlStateMachine.calibrate as overlay
-    # RESET and POST /calibrate). Measured as inner-lip protrusion past the
-    # outer lower lip, so a normal open mouth used for shoot stays negative
-    # and must not reset. Hysteresis so a held tongue fires once.
-    tongue_on: float = 0.012
-    tongue_off: float = 0.002
+    # Raised eyebrows recentre pose (same ControlStateMachine.calibrate as
+    # overlay RESET and POST /calibrate). Thresholds are deltas above the
+    # resting brow-to-eyelid gap sampled on the first valid face and again
+    # on click-calibrate. Hysteresis so a hold fires once. An open mouth
+    # does not move the brows, so shoot cannot reset.
+    brow_on: float = 0.030
+    brow_off: float = 0.012
     # Eyelids do not close in sync, so mid-blink the left/right difference
     # spikes well past wink_on and reads as a wink. Measured on a real blink:
     # left 0.0043 against right 0.0551, a difference of 0.0508, double the
@@ -101,8 +102,8 @@ class ControlThresholds:
             raise ValueError("mouth_min_gap must be positive")
         if self.wink_off >= self.wink_on:
             raise ValueError("wink_off must be below wink_on")
-        if self.tongue_off >= self.tongue_on:
-            raise ValueError("tongue_off must be below tongue_on")
+        if self.brow_off >= self.brow_on:
+            raise ValueError("brow_off must be below brow_on")
         if not 0.0 < self.eye_open_fraction < 1.0:
             raise ValueError("eye_open_fraction must be between 0 and 1")
         if self.eye_open_floor <= 0:
@@ -132,8 +133,8 @@ class ControlThresholds:
             "mouth_min_gap": self.mouth_min_gap,
             "wink_on": self.wink_on,
             "wink_off": self.wink_off,
-            "tongue_on": self.tongue_on,
-            "tongue_off": self.tongue_off,
+            "brow_on": self.brow_on,
+            "brow_off": self.brow_off,
             "eye_open_fraction": self.eye_open_fraction,
             "eye_open_floor": self.eye_open_floor,
             "dwell_seconds": self.dwell_seconds,
@@ -197,6 +198,7 @@ class ControlStateMachine:
     center: tuple[float, float] | None = None
     mouth_rest: float | None = None
     eye_rest: float | None = None
+    brow_rest: float | None = None
     auto_recentre: bool = True
     recentred: bool = False
     _moving: bool = False
@@ -206,12 +208,14 @@ class ControlStateMachine:
     _wink_eye: str | None = None
     _mouth: _EdgeTrigger = field(init=False)
     _wink: _EdgeTrigger = field(init=False)
-    _tongue: _EdgeTrigger = field(init=False)
+    _brow: _EdgeTrigger = field(init=False)
 
     def __post_init__(self) -> None:
         self._mouth = _EdgeTrigger(self.thresholds.mouth_open, self.thresholds.mouth_reset)
         self._wink = _EdgeTrigger(self.thresholds.wink_on, self.thresholds.wink_off)
-        self._tongue = _EdgeTrigger(self.thresholds.tongue_on, self.thresholds.tongue_off)
+        # Until a resting brow gap is sampled, keep the trigger above any
+        # realistic value so a hold cannot fire on the first unseen face.
+        self._brow = _EdgeTrigger(1.0, 0.9)
 
     def calibrate(
         self,
@@ -219,12 +223,15 @@ class ControlStateMachine:
         *,
         mouth_rest: float | None = None,
         eye_rest: float | None = None,
+        brow_rest: float | None = None,
     ) -> None:
-        """Set the neutral centre, and optionally the resting mouth baseline.
+        """Set the neutral centre, and optionally resting expression baselines.
 
         `mouth_rest` is the mouth-opening ratio measured while the user sits
         neutral. It raises the release threshold clear of that value so the
-        shoot latch cannot stick open.
+        shoot latch cannot stick open. `brow_rest` is the brow-to-eyelid gap
+        at the same pose; gesture reset does not pass it, because raised
+        brows are not a resting face.
         """
 
         self.center = nose
@@ -233,6 +240,9 @@ class ControlStateMachine:
             self._apply_mouth_thresholds()
         if eye_rest is not None:
             self.eye_rest = eye_rest
+        if brow_rest is not None:
+            self.brow_rest = brow_rest
+            self._apply_brow_thresholds()
         self._moving = False
         self._direction = None
         self._still_since = None
@@ -263,16 +273,16 @@ class ControlStateMachine:
             self._wink_eye = None
             self._mouth.update(None, moment)
             self._wink.update(None, moment)
-            self._tongue.update(None, moment)
+            self._brow.update(None, moment)
             return self._state(
                 offset=(0.0, 0.0),
                 nose_point=None,
                 mouth_value=None,
                 wink_value=None,
-                tongue_value=None,
+                brow_value=None,
                 mouth_fired=False,
                 wink_fired=False,
-                tongue_fired=False,
+                brow_fired=False,
                 tracking=False,
                 now=moment,
             )
@@ -302,17 +312,22 @@ class ControlStateMachine:
         self._wink_eye = (
             None if wink_value == 0.0 else _wink_eye(signed_wink, self.thresholds.wink_off)
         )
-        tongue_value = features.get("tongue_out")
-        _, tongue_fired = self._tongue.update(tongue_value, moment)
-        if tongue_fired:
+        brow_value = features.get("eyebrow_raise")
+        if self.brow_rest is None and brow_value is not None:
+            # First valid face, same idea as first-frame pose centre: this is
+            # rest, not a raise, so do not fire on this frame.
+            self.brow_rest = brow_value
+            self._apply_brow_thresholds()
+        _, brow_fired = self._brow.update(
+            None if self.brow_rest is None else brow_value, moment
+        )
+        if brow_fired:
             # Same pose reset as overlay RESET / POST /calibrate, but do not
-            # sample mouth_rest: the tongue is not a resting mouth.
+            # sample mouth_rest or brow_rest: the brows are raised.
             self.calibrate(nose)
             offset = (0.0, 0.0)
             self._update_movement(offset)
-        # Shoot is mouth-open. Tongue-out also opens the mouth, so ignore the
-        # mouth latch while the tongue is out or the reset would fire Space.
-        mouth_value = None if self._tongue.latched else features.get("mouth_opening")
+        mouth_value = features.get("mouth_opening")
         _, mouth_fired = self._mouth.update(mouth_value, moment)
         _, wink_fired = self._wink.update(wink_value, moment)
 
@@ -321,10 +336,10 @@ class ControlStateMachine:
             nose_point=nose,
             mouth_value=features.get("mouth_opening"),
             wink_value=wink_value,
-            tongue_value=tongue_value,
+            brow_value=brow_value,
             mouth_fired=mouth_fired,
             wink_fired=wink_fired,
-            tongue_fired=tongue_fired,
+            brow_fired=brow_fired,
             tracking=True,
             now=moment,
         )
@@ -378,6 +393,15 @@ class ControlStateMachine:
         self._mouth.off_value = reset
         self._mouth.on_value = max(self.thresholds.mouth_open, reset + self.thresholds.mouth_min_gap)
 
+    def _apply_brow_thresholds(self) -> None:
+        """Place the raise trigger a delta above this person's resting gap."""
+
+        rest = self.brow_rest
+        if rest is None:
+            return
+        self._brow.off_value = rest + self.thresholds.brow_off
+        self._brow.on_value = rest + self.thresholds.brow_on
+
     @property
     def mouth_thresholds(self) -> tuple[float, float]:
         """Effective (open, reset) after any resting-mouth calibration."""
@@ -413,10 +437,10 @@ class ControlStateMachine:
         nose_point: tuple[float, float] | None,
         mouth_value: float | None,
         wink_value: float | None,
-        tongue_value: float | None,
+        brow_value: float | None,
         mouth_fired: bool,
         wink_fired: bool,
-        tongue_fired: bool,
+        brow_fired: bool,
         tracking: bool,
         now: float,
     ) -> dict[str, object]:
@@ -447,15 +471,17 @@ class ControlStateMachine:
                 "held_seconds": round(self._wink.held_seconds(now), 3),
                 "eye": self._wink_eye,
             },
-            "tongue": {
-                "active": self._tongue.latched,
-                "fired": tongue_fired,
-                "value": tongue_value,
+            "eyebrow": {
+                "active": self._brow.latched,
+                "fired": brow_fired,
+                "value": brow_value,
                 "confidence": _confidence(
-                    None if tongue_value is None else max(tongue_value, 0.0),
-                    self.thresholds.tongue_on,
+                    None
+                    if brow_value is None or self.brow_rest is None
+                    else max(brow_value - self.brow_rest, 0.0),
+                    self.thresholds.brow_on,
                 ),
-                "held_seconds": round(self._tongue.held_seconds(now), 3),
+                "held_seconds": round(self._brow.held_seconds(now), 3),
             },
             "tracking": tracking,
             "recentred": self.recentred,

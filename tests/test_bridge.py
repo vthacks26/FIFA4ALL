@@ -471,7 +471,12 @@ class WebcamCalibrateTests(unittest.TestCase):
         self.assertTrue(
             source.apply_pending_calibrate(
                 off,
-                {"mouth_opening": 0.04, "left_eye_opening": 0.08, "right_eye_opening": 0.08},
+                {
+                    "mouth_opening": 0.04,
+                    "left_eye_opening": 0.08,
+                    "right_eye_opening": 0.08,
+                    "eyebrow_raise": 0.10,
+                },
             )
         )
         after = source.machine.update(nose=off, features={}, tracking_valid=True)
@@ -479,6 +484,7 @@ class WebcamCalibrateTests(unittest.TestCase):
         self.assertEqual(after["keys"], [])
         self.assertEqual(source.machine.mouth_rest, 0.04)
         self.assertEqual(source.machine.eye_rest, 0.08)
+        self.assertEqual(source.machine.brow_rest, 0.10)
 
     def test_a_second_site_reset_still_drives_the_same_injector(self) -> None:
         """Website RESET stays live after the first calibrate; same machine."""

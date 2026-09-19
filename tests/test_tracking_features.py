@@ -10,9 +10,6 @@ BASE_POINTS = {
     "right_cheek": (0.75, 0.50),
     "upper_lip": (0.50, 0.58),
     "lower_lip": (0.50, 0.63),
-    "outer_lower_lip": (0.50, 0.70),
-    "inner_lower_left": (0.46, 0.63),
-    "inner_lower_right": (0.54, 0.63),
     "nose_tip": (0.50, 0.45),
     "left_eye": (0.38, 0.35),
     "right_eye": (0.62, 0.35),
@@ -20,6 +17,10 @@ BASE_POINTS = {
     "left_lower_eyelid": (0.38, 0.370),
     "right_upper_eyelid": (0.62, 0.330),
     "right_lower_eyelid": (0.62, 0.370),
+    "left_inner_brow": (0.40, 0.280),
+    "left_outer_brow": (0.32, 0.285),
+    "right_inner_brow": (0.60, 0.280),
+    "right_outer_brow": (0.68, 0.285),
 }
 
 
@@ -33,35 +34,40 @@ class FaceFeatureExtractorTests(unittest.TestCase):
         self.assertAlmostEqual(frame.features["head_turn"].value, 0.0)
         self.assertAlmostEqual(frame.features["head_tilt"].value, 0.0)
         self.assertAlmostEqual(frame.features["left_wink"].value, 0.0)
-        self.assertLess(frame.features["tongue_out"].value, 0.0)
+        self.assertAlmostEqual(frame.features["eyebrow_raise"].value, 0.095)
 
-    def test_open_mouth_without_tongue_stays_non_positive(self):
-        """Shoot (mouth open) must not look like a tongue-out reset."""
+    def test_open_mouth_does_not_change_eyebrow_raise(self):
+        """Shoot (mouth open) must not look like an eyebrow-raise reset."""
 
         extractor = FaceFeatureExtractor(FeatureConfig(smoothing_alpha=1.0))
+        rest = extractor.from_named_points(BASE_POINTS)
         points = dict(BASE_POINTS)
-        # Drop the inner lip the way an open mouth does, keeping it above the
-        # outer lower lip so protrusion stays negative.
         points["lower_lip"] = (0.50, 0.68)
-        points["inner_lower_left"] = (0.46, 0.68)
-        points["inner_lower_right"] = (0.54, 0.68)
-        points["outer_lower_lip"] = (0.50, 0.74)
+        points["upper_lip"] = (0.50, 0.52)
 
         frame = extractor.from_named_points(points)
 
         self.assertGreater(frame.features["mouth_opening"].value, 0.15)
-        self.assertLessEqual(frame.features["tongue_out"].value, 0.0)
+        self.assertAlmostEqual(
+            frame.features["eyebrow_raise"].value,
+            rest.features["eyebrow_raise"].value,
+        )
 
-    def test_tongue_out_is_positive_when_inner_lip_passes_outer_lip(self):
+    def test_raised_brows_increase_eyebrow_raise(self):
         extractor = FaceFeatureExtractor(FeatureConfig(smoothing_alpha=1.0))
+        rest = extractor.from_named_points(BASE_POINTS)
         points = dict(BASE_POINTS)
-        points["lower_lip"] = (0.50, 0.76)
-        points["inner_lower_left"] = (0.46, 0.74)
-        points["inner_lower_right"] = (0.54, 0.74)
+        points["left_inner_brow"] = (0.40, 0.250)
+        points["left_outer_brow"] = (0.32, 0.255)
+        points["right_inner_brow"] = (0.60, 0.250)
+        points["right_outer_brow"] = (0.68, 0.255)
 
         frame = extractor.from_named_points(points)
 
-        self.assertGreater(frame.features["tongue_out"].value, 0.012)
+        self.assertGreater(
+            frame.features["eyebrow_raise"].value - rest.features["eyebrow_raise"].value,
+            0.030,
+        )
 
     def test_head_turn_sign_uses_camera_image_direction(self):
         extractor = FaceFeatureExtractor(FeatureConfig(smoothing_alpha=1.0))

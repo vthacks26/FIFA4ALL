@@ -24,8 +24,6 @@ const LABELS: ReadonlyArray<{ key: string; x: number; y: number }> = [
   { key: "A", x: -1, y: 0 },
 ];
 
-const DIRECTIONS: readonly Direction[] = ["E", "NE", "N", "NW", "W", "SW", "S", "SE"];
-
 /** Pixels-per-normalized-unit for each axis, plus where neutral sits. */
 export interface ReticleMapping {
   readonly anchorX: number;
@@ -105,13 +103,9 @@ export function Reticle({
             />
           )}
 
-          {DIRECTIONS.map((dir) => (
-            <path
-              key={dir}
-              className={`reticle__wedge ${state.direction === dir ? "is-active" : ""}`}
-              d={wedgePath(dir, neutral, outer)}
-            />
-          ))}
+          {state.direction !== null && (
+            <path className="reticle__wedge" d={wedgePath(state.direction, neutral, outer)} />
+          )}
         </g>
       </svg>
 

@@ -39,9 +39,6 @@ class FaceFeatureExtractor:
         "right_cheek",
         "upper_lip",
         "lower_lip",
-        "outer_lower_lip",
-        "inner_lower_left",
-        "inner_lower_right",
         "nose_tip",
         "left_eye",
         "right_eye",
@@ -49,6 +46,10 @@ class FaceFeatureExtractor:
         "left_lower_eyelid",
         "right_upper_eyelid",
         "right_lower_eyelid",
+        "left_inner_brow",
+        "left_outer_brow",
+        "right_inner_brow",
+        "right_outer_brow",
     }
 
     def __init__(self, config: FeatureConfig | None = None) -> None:
@@ -96,7 +97,7 @@ class FaceFeatureExtractor:
             raise ValueError("face width too small for stable normalized measurements")
 
         mouth_opening = _distance(points["upper_lip"], points["lower_lip"]) / face_width
-        tongue_out = _tongue_protrusion(points, face_width)
+        eyebrow_raise = _eyebrow_raise(points, face_width)
 
         cheek_mid_x = (points["left_cheek"][0] + points["right_cheek"][0]) / 2.0
         head_turn = (points["nose_tip"][0] - cheek_mid_x) / face_width
@@ -116,7 +117,7 @@ class FaceFeatureExtractor:
             "left_wink": left_wink,
             "left_eye_opening": left_eye_opening,
             "right_eye_opening": right_eye_opening,
-            "tongue_out": tongue_out,
+            "eyebrow_raise": eyebrow_raise,
         }
 
     def _smooth(self, name: str, value: float) -> float:
@@ -128,23 +129,19 @@ class FaceFeatureExtractor:
         return self._smoothed[name]
 
 
-def _tongue_protrusion(points: Mapping[str, Point], face_width: float) -> float:
-    """Positive when the inner lower lip extends below the outer lower lip.
+def _eyebrow_raise(points: Mapping[str, Point], face_width: float) -> float:
+    """Brow-to-eyelid gap divided by face width. Larger means brows are higher.
 
-    Image y grows downward. A normal open mouth keeps the inner lip (14) above
-    the outer lower lip / lip-chin line (17), so this stays <= 0. Sticking the
-    tongue out pushes the inner contour past that line and the value goes
-    positive. That is what separates reset from shoot.
+    Image y grows downward, so a raised brow (smaller y) increases the gap to
+    the upper eyelid. An open mouth only moves the lips, so this stays put and
+    cannot be confused with shoot.
     """
 
-    inner_y = points["lower_lip"][1]
-    extra_left = points.get("inner_lower_left")
-    extra_right = points.get("inner_lower_right")
-    if extra_left is not None:
-        inner_y = max(inner_y, extra_left[1])
-    if extra_right is not None:
-        inner_y = max(inner_y, extra_right[1])
-    return (inner_y - points["outer_lower_lip"][1]) / face_width
+    left_brow_y = (points["left_inner_brow"][1] + points["left_outer_brow"][1]) / 2.0
+    right_brow_y = (points["right_inner_brow"][1] + points["right_outer_brow"][1]) / 2.0
+    left_gap = points["left_upper_eyelid"][1] - left_brow_y
+    right_gap = points["right_upper_eyelid"][1] - right_brow_y
+    return (left_gap + right_gap) / 2.0 / face_width
 
 
 def _distance(a: Sequence[float], b: Sequence[float]) -> float:
