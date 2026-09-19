@@ -8,8 +8,7 @@ import {
 } from "../types";
 
 export const BRIDGE_URL =
-  (import.meta.env.VITE_BRIDGE_URL as string | undefined) ??
-  (import.meta.env.DEV ? "http://127.0.0.1:8765" : "");
+  (import.meta.env.VITE_BRIDGE_URL as string | undefined) ?? "http://127.0.0.1:8765";
 
 export const MOCK_CONFIG: BridgeConfig = {
   thresholds: DEFAULT_THRESHOLDS,

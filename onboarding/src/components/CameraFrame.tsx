@@ -130,6 +130,8 @@ function buildMapping(
     const centreX = view.width / 2;
     const centreY = view.height / 2;
     return {
+      width: view.width,
+      height: view.height,
       anchorX: centreX,
       anchorY: centreY,
       ballX: centreX + state.nose.x * pxPerUnit,
@@ -156,6 +158,8 @@ function buildMapping(
   const ball = toPixels(nose.x, nose.y);
 
   return {
+    width: view.width,
+    height: view.height,
     anchorX: anchor.x,
     anchorY: anchor.y,
     ballX: ball.x,
