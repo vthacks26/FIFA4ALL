@@ -32,6 +32,8 @@ from tracking.mediapipe_tracker import WebcamFaceTracker
 from tracking.overlay import WINDOW_TITLE, decorate_overlay_window, restore_chrome_focus
 from tracking.quartz_keys import HeldKeySession, QuartzKeyInjector, labels_to_keys
 
+RESET_BUTTON_LABEL = "RESET"
+
 
 def _frontmost_app() -> str:
     if sys.platform != "darwin":
@@ -71,6 +73,53 @@ def _accessibility_trusted() -> bool | None:
         return False
 
 
+def reset_button_rect(width: int, height: int) -> tuple[int, int, int, int]:
+    """Bottom-right Reset hit box in frame pixels (x1, y1, x2, y2)."""
+
+    box_w = min(168, max(96, width // 3))
+    box_h = min(52, max(36, height // 8))
+    margin = 10
+    x2 = max(margin + box_w, width - margin)
+    y2 = max(margin + box_h, height - margin)
+    return (x2 - box_w, y2 - box_h, x2, y2)
+
+
+def hit_reset_button(x: int, y: int, width: int, height: int) -> bool:
+    x1, y1, x2, y2 = reset_button_rect(width, height)
+    return x1 <= x <= x2 and y1 <= y <= y2
+
+
+def recalibrate_pose(
+    joystick: NoseJoystickState,
+    space_hold: HoldState,
+    session: HeldKeySession,
+    extractor: object | None = None,
+) -> None:
+    """Clear the nose-axis baseline. Next valid face pose is the new neutral."""
+
+    joystick.reset()
+    space_hold.started_at = None
+    session.release_all()
+    reset = getattr(extractor, "reset", None)
+    if callable(reset):
+        reset()
+
+
+def _draw_reset_button(cv2: object, vis: object, *, armed: bool) -> None:
+    height, width = vis.shape[:2]
+    x1, y1, x2, y2 = reset_button_rect(width, height)
+    fill = (40, 170, 70) if armed else (36, 96, 230)
+    cv2.rectangle(vis, (x1, y1), (x2, y2), fill, -1)
+    cv2.rectangle(vis, (x1, y1), (x2, y2), (255, 255, 255), 2)
+    label = "SIT STRAIGHT" if armed else RESET_BUTTON_LABEL
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    scale = 0.55 if armed else 0.7
+    (tw, th), _ = cv2.getTextSize(label, font, scale, 2)
+    tx = x1 + max(4, (x2 - x1 - tw) // 2)
+    ty = y1 + (y2 - y1 + th) // 2
+    cv2.putText(vis, label, (tx, ty), font, scale, (255, 255, 255), 2, cv2.LINE_AA)
+
+
 def _apply(session: HeldKeySession, keys: frozenset[str]) -> None:
     prev = session.held()
     session.apply(keys)
@@ -91,8 +140,9 @@ def annotate_frame(
     tracking_valid: bool,
     space_hold_seconds: float,
     camera_name: str | None = None,
+    reset_armed: bool = False,
 ) -> object:
-    """Draw face landmarks, WASD nose-joystick zones, and live key labels."""
+    """Draw face landmarks, WASD nose-joystick zones, live keys, and Reset."""
 
     import cv2  # type: ignore[import-not-found]
 
@@ -109,9 +159,11 @@ def annotate_frame(
             f"tracking: {'valid' if tracking_valid else 'lost'}",
             f"keys: {', '.join(labels) if labels else '-'}",
             f"space hold: {space_hold_seconds:.2f}s ({charge * 100:.0f}%)",
+            "Reset: sit straight, then tap RESET",
         ]
     )
     _draw_lines(cv2, vis, lines)
+    _draw_reset_button(cv2, vis, armed=reset_armed)
     return vis
 
 
@@ -206,16 +258,43 @@ def main(argv: list[str] | None = None) -> int:
     )
     if preview:
         print(
-            f"Face overlay '{WINDOW_TITLE}' is click-through and should stay "
-            "above Luna without becoming the key window.",
+            f"Face overlay '{WINDOW_TITLE}' stays above Luna. Tap RESET after "
+            "sitting straight to recapture the neutral look axis.",
             flush=True,
         )
     import cv2  # type: ignore[import-not-found]
 
     overlay_ready = False
     chrome_restored = False
+    mouse_state = {"size": (640, 480), "pending": False}
+    reset_until = 0.0
+
+    def _on_mouse(event: int, x: int, y: int, *_args: object) -> None:
+        if event != cv2.EVENT_LBUTTONDOWN:
+            return
+        width, height = mouse_state["size"]
+        if hit_reset_button(x, y, width, height):
+            mouse_state["pending"] = True
+
     try:
         for tracked in tracker.tracked_frames():
+            if mouse_state["pending"]:
+                mouse_state["pending"] = False
+                recalibrate_pose(
+                    joystick,
+                    space_hold,
+                    session,
+                    extractor=tracker.extractor,
+                )
+                reset_until = monotonic() + 2.0
+                print(
+                    "\nReset: pose baseline cleared. Sit straight; "
+                    "next valid face is neutral.",
+                    flush=True,
+                )
+                restore_chrome_focus()
+                decorate_overlay_window(WINDOW_TITLE)
+
             labels: list[str] = []
             tracking_valid = bool(
                 tracked.movement.tracking_valid and tracked.landmarks is not None
@@ -252,14 +331,18 @@ def main(argv: list[str] | None = None) -> int:
                     tracking_valid=tracking_valid,
                     space_hold_seconds=hold_s,
                     camera_name=tracker.opened_camera_name,
+                    reset_armed=monotonic() < reset_until,
                 )
+                height, width = vis.shape[:2]
+                mouse_state["size"] = (width, height)
                 cv2.namedWindow(WINDOW_TITLE, cv2.WINDOW_NORMAL)
                 cv2.imshow(WINDOW_TITLE, vis)
+                cv2.setMouseCallback(WINDOW_TITLE, _on_mouse)
                 cv2.waitKey(1)
                 if not overlay_ready:
                     overlay_ready = decorate_overlay_window(WINDOW_TITLE)
                     if overlay_ready:
-                        print("\nOverlay is floating / click-through.", flush=True)
+                        print("\nOverlay is floating; Reset is tappable.", flush=True)
                 if overlay_ready and not chrome_restored:
                     restore_chrome_focus()
                     decorate_overlay_window(WINDOW_TITLE)

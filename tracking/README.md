@@ -51,7 +51,7 @@ The diagnostic opens a webcam preview, overlays live feature values, shows track
 
 For Quartz OS key holds into the frontmost app (Google Chrome / Luna), MacBook camera only.
 
-Face + WASD look-axis overlay (click-through, tries not to steal Chrome focus):
+Face + WASD look-axis overlay (non-activating, tries not to steal Chrome focus). Sit straight and tap **RESET** to recapture the neutral nose axis:
 
 ```bash
 MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --preview

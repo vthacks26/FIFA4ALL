@@ -1,6 +1,7 @@
 import unittest
 
-from tracking.control_preview import PreviewThresholds, suggested_keys
+from tracking.control_preview import HoldState, NoseJoystickState, PreviewThresholds, suggested_keys
+from tracking.live import hit_reset_button, recalibrate_pose, reset_button_rect
 from tracking.mac_camera import (
     CameraDevice,
     allowed_opencv_indexes,
@@ -117,6 +118,28 @@ class AnnotateFrameTests(unittest.TestCase):
             camera_name="MacBook Pro Camera",
         )
         self.assertEqual(vis.shape, blank.shape)
+
+
+class ResetButtonTests(unittest.TestCase):
+    def test_reset_hit_box_is_bottom_right(self):
+        x1, y1, x2, y2 = reset_button_rect(640, 360)
+        self.assertGreater(x1, 400)
+        self.assertGreater(y1, 280)
+        self.assertTrue(hit_reset_button(x1 + 8, y1 + 8, 640, 360))
+        self.assertFalse(hit_reset_button(10, 10, 640, 360))
+
+    def test_recalibrate_clears_joystick_center(self):
+        joystick = NoseJoystickState()
+        joystick.update((0.4, 0.4))
+        self.assertIsNotNone(joystick.center)
+        space = HoldState()
+        space.update(True, 1.0)
+        session = HeldKeySession(RecordingKeyInjector(clock=lambda: 0.0))
+        session.apply(labels_to_keys(["W"]))
+        recalibrate_pose(joystick, space, session)
+        self.assertIsNone(joystick.center)
+        self.assertIsNone(space.started_at)
+        self.assertEqual(session.held(), frozenset())
 
 
 if __name__ == "__main__":

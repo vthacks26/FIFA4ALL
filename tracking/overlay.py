@@ -2,7 +2,8 @@
 
 OpenCV's HighGUI window would otherwise become key and steal Luna/Chrome
 focus. After the first ``imshow``, we retarget that Cocoa window: floating
-level, click-through, and ``NSWindowStyleMaskNonactivatingPanel``.
+level and ``NSWindowStyleMaskNonactivatingPanel``. Mouse events stay enabled
+so the on-canvas Reset button can be tapped.
 """
 
 from __future__ import annotations
@@ -104,7 +105,7 @@ def decorate_overlay_window(title: str = WINDOW_TITLE) -> bool:
         _send(
             window,
             "setIgnoresMouseEvents:",
-            True,
+            False,
             restype=None,
             argtypes=[c_bool],
         )
