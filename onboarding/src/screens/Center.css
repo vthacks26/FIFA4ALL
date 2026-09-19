@@ -70,3 +70,8 @@
     transform: scale(1.14);
   }
 }
+
+/* Progress rail sits above the eyebrow, with room to breathe. */
+.rail {
+  margin-bottom: 14px;
+}

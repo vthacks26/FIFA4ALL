@@ -7,6 +7,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { StepRail } from "../components/StepRail";
 import { Ball } from "../components/Ball";
 import { CameraFrame } from "../components/CameraFrame";
 import { Checklist } from "../components/Checklist";
@@ -57,6 +58,7 @@ export function DrillPassing({ channel, onComplete }: DrillPassingProps) {
       <div className="pitch-bg" />
 
       <header className="drill__header">
+        <StepRail phase="PASSING_TRAINING" />
         <p className="eyebrow">Drill 03</p>
         <h1 className="drill__title">Wink to pass</h1>
         <p className="lede">Wink with either eye to play the ball to your teammate.</p>

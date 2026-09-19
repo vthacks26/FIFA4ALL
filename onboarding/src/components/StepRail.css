@@ -1,0 +1,62 @@
+.rail {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rail__step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-family: var(--display);
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  transition: color 0.25s var(--snap);
+}
+
+/* Connector between steps. */
+.rail__step + .rail__step::before {
+  content: "";
+  width: clamp(18px, 3vw, 44px);
+  height: 2px;
+  margin: 0 12px;
+  border-radius: 2px;
+  background: var(--line);
+}
+
+.rail__step.is-done,
+.rail__step.is-active {
+  color: var(--off-white);
+}
+
+.rail__step.is-done + .rail__step::before,
+.rail__step.is-active::before {
+  background: rgba(155, 255, 60, 0.5);
+}
+
+.rail__dot {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  color: var(--navy-900);
+  flex: 0 0 auto;
+  transition: all 0.25s var(--snap);
+}
+
+.rail__step.is-active .rail__dot {
+  border-color: var(--lime);
+  box-shadow: 0 0 0 4px rgba(155, 255, 60, 0.14);
+}
+
+.rail__step.is-done .rail__dot {
+  background: var(--lime);
+  border-color: var(--lime);
+}

@@ -82,3 +82,25 @@
   font-size: 0.85rem;
   text-align: center;
 }
+
+/* Coaching line shown only while the face is missing. */
+.camera__coach {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(6, 11, 22, 0.88);
+  border: 1px solid var(--amber);
+  color: var(--amber);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  text-align: center;
+  animation: coach-in 0.3s var(--snap);
+}
+
+@keyframes coach-in {
+  from { opacity: 0; transform: translateY(8px); }
+}

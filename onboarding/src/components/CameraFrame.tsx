@@ -101,6 +101,13 @@ export function CameraFrame({
         <div className={`camera__status ${state.tracking ? "is-ok" : ""}`}>
           {state.tracking ? "FACE TRACKED" : "NO FACE"}
         </div>
+
+        {/* Losing tracking mid-drill looks like the app broke. Say what to do. */}
+        {!state.tracking && (
+          <p className="camera__coach">
+            Move back into frame, and check the light is on your face
+          </p>
+        )}
       </div>
       {label !== undefined && <p className="camera__label">{label}</p>}
     </div>
@@ -130,6 +137,8 @@ function buildMapping(
     const centreX = view.width / 2;
     const centreY = view.height / 2;
     return {
+      width: view.width,
+      height: view.height,
       anchorX: centreX,
       anchorY: centreY,
       ballX: centreX + state.nose.x * pxPerUnit,
@@ -156,6 +165,8 @@ function buildMapping(
   const ball = toPixels(nose.x, nose.y);
 
   return {
+    width: view.width,
+    height: view.height,
     anchorX: anchor.x,
     anchorY: anchor.y,
     ballX: ball.x,

@@ -8,6 +8,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { StepRail } from "../components/StepRail";
 import { CameraFrame } from "../components/CameraFrame";
 import { Checklist } from "../components/Checklist";
 import { Player } from "../components/Player";
@@ -60,6 +61,7 @@ export function DrillMovement({ channel, onComplete }: DrillMovementProps) {
       <div className="pitch-bg" />
 
       <header className="drill__header">
+        <StepRail phase="MOVEMENT_TRAINING" />
         <p className="eyebrow">Drill 01</p>
         <h1 className="drill__title">Movement</h1>
         <p className="lede">

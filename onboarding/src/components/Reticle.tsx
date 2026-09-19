@@ -26,6 +26,9 @@ const LABELS: ReadonlyArray<{ key: string; x: number; y: number }> = [
 
 /** Pixels-per-normalized-unit for each axis, plus where neutral sits. */
 export interface ReticleMapping {
+  /** Size of the frame the overlay covers, in pixels. */
+  readonly width: number;
+  readonly height: number;
   readonly anchorX: number;
   readonly anchorY: number;
   readonly ballX: number;
@@ -53,7 +56,7 @@ export function Reticle({
   locked = false,
   showKeys = true,
 }: ReticleProps) {
-  const { anchorX, anchorY, ballX, ballY, scaleX, scaleY } = mapping;
+  const { width, height, anchorX, anchorY, ballX, ballY, scaleX, scaleY } = mapping;
   const neutral = thresholds.exit_radius;
   const inner = thresholds.enter_radius;
   const outer = neutral * 2.9;
@@ -65,12 +68,16 @@ export function Reticle({
 
   return (
     <>
+      {/* The SVG spans the whole frame. A zero-sized viewport positioned at the
+          anchor paints nothing, whatever overflow says, so the geometry is
+          translated into place instead. */}
       <svg
         className={`reticle ${locked ? "is-locked" : ""}`}
-        style={{ left: anchorX, top: anchorY }}
-        overflow="visible"
+        width={width}
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
       >
-        <g transform={`scale(${scaleX} ${scaleY})`}>
+        <g transform={`translate(${anchorX} ${anchorY}) scale(${scaleX} ${scaleY})`}>
           <circle className="reticle__radar" r={outer} />
           <circle className="reticle__radar" r={outer * 0.66} />
           <line className="reticle__cross" x1={-outer} y1={0} x2={outer} y2={0} />

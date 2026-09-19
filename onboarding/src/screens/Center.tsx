@@ -7,6 +7,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { StepRail } from "../components/StepRail";
 import { CameraFrame } from "../components/CameraFrame";
 import { Checklist } from "../components/Checklist";
 import type { ControlChannel } from "../control/useControlState";
@@ -51,6 +52,7 @@ export function Center({ channel, onNext }: CenterProps) {
       <div className="pitch-bg" />
 
       <header className="center__header">
+        <StepRail phase="CENTER_CALIBRATION" />
         <p className="eyebrow">Calibration</p>
         <h1 className="center__title">Find your center</h1>
         <p className="lede">

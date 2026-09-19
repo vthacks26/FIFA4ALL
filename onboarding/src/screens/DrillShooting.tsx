@@ -7,6 +7,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { StepRail } from "../components/StepRail";
 import { Ball } from "../components/Ball";
 import { CameraFrame } from "../components/CameraFrame";
 import { Checklist } from "../components/Checklist";
@@ -53,6 +54,7 @@ export function DrillShooting({ channel, onComplete }: DrillShootingProps) {
       <div className="pitch-bg" />
 
       <header className="drill__header">
+        <StepRail phase="SHOOTING_TRAINING" />
         <p className="eyebrow">Drill 02</p>
         <h1 className="drill__title">Open to shoot</h1>
         <p className="lede">Open your mouth like an &ldquo;O&rdquo; to strike the ball.</p>
@@ -83,7 +85,7 @@ export function DrillShooting({ channel, onComplete }: DrillShootingProps) {
           </div>
 
           <div className="drill__shooter">
-            <Player pose={kicking ? "shoot" : "idle"} kit="amber" size={240} />
+            <Player pose={kicking ? "shoot" : "idle"} kit="amber" size={215} />
           </div>
 
           {shotId > 0 && (
