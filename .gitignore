@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+.venv*/
+.capture/
+models/
+
+# Keep private user data and local recordings out of Git.
+profiles/
+recordings/
+*.mp4
+*.mov
+*.avi
+.gstack/

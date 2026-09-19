@@ -1,0 +1,126 @@
+.dev {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  font-size: 0.8rem;
+}
+
+.dev__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--navy-800);
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--display);
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+}
+
+.dev__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.dev__dot--live { background: var(--lime); }
+.dev__dot--mock { background: var(--amber); }
+.dev__dot--error { background: var(--red); }
+.dev__dot--connecting { background: var(--teal); }
+
+.dev__body {
+  width: 268px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dev__switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--off-white);
+  cursor: pointer;
+}
+
+.dev__error {
+  margin: 0;
+  color: var(--amber);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.dev__group {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.dev__group:disabled {
+  opacity: 0.4;
+}
+
+.dev__group legend {
+  font-family: var(--display);
+  font-size: 0.6rem;
+  letter-spacing: 0.16em;
+  color: var(--muted);
+  margin-bottom: 7px;
+}
+
+.dev__pad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+
+.dev__pad-btn,
+.dev__btn {
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--navy-700);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.78rem;
+  transition: all 0.15s var(--snap);
+}
+
+.dev__pad-btn.is-on,
+.dev__btn.is-on {
+  background: var(--lime);
+  border-color: var(--lime);
+  color: var(--navy-900);
+}
+
+.dev__row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.dev__btn--wide {
+  width: 100%;
+}
+
+.dev__state {
+  margin: 0;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--navy-900);
+  color: var(--lime);
+  font-size: 0.66rem;
+  line-height: 1.35;
+  max-height: 96px;
+  overflow: auto;
+}

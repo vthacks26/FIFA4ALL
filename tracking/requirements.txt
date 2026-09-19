@@ -1,0 +1,7 @@
+# Optional webcam diagnostic/runtime dependencies for Person 1 tracking.
+# Tested on macOS with Python 3.12. Do not install these for simulation-only
+# tests or CI unless webcam tracking is being exercised. The importable geometry
+# and synthetic fixtures use only the Python standard library.
+mediapipe==0.10.14
+opencv-python>=4.11,<5
+numpy>=1.26,<2

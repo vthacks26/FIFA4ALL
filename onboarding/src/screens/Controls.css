@@ -1,0 +1,161 @@
+.controls {
+  justify-content: space-between;
+}
+
+.controls__header {
+  position: relative;
+  z-index: 2;
+}
+
+.controls__title {
+  font-size: clamp(2.2rem, 4.4vw, 4rem);
+  line-height: 0.95;
+  margin-top: 8px;
+}
+
+.controls__cards {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(14px, 2vw, 28px);
+  align-items: stretch;
+}
+
+.control-card {
+  --tone: var(--lime);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 22px 18px;
+  border-radius: 20px;
+  background: rgba(11, 20, 36, 0.8);
+  border: 1px solid var(--line);
+  text-align: center;
+  transition: border-color 0.3s var(--snap), transform 0.3s var(--snap);
+  animation: card-in 0.5s var(--snap) both;
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+}
+
+.control-card--amber { --tone: var(--amber); }
+.control-card--purple { --tone: var(--purple); }
+
+.control-card.is-active {
+  border-color: var(--tone);
+  transform: translateY(-6px);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 16%, transparent);
+}
+
+.control-card__art {
+  height: 132px;
+  width: 100%;
+  display: grid;
+  place-items: center;
+}
+
+.control-card__title {
+  font-size: 1.5rem;
+  color: var(--tone);
+}
+
+.control-card__gesture {
+  margin: 0;
+  color: var(--off-white);
+  font-size: 0.95rem;
+}
+
+.control-card__keys {
+  padding: 5px 13px;
+  border-radius: 999px;
+  background: var(--navy-700);
+  color: var(--muted);
+  font-family: var(--display);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+}
+
+.controls__footer {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  justify-content: flex-start;
+}
+
+/* ---- inline control demos ---- */
+.art {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+.art--move .art__ring {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  border: 2px dashed rgba(155, 255, 60, 0.4);
+}
+
+.art--move .art__orbit {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.art--move.is-playing .art__orbit {
+  animation: orbit 2.2s linear infinite;
+}
+
+@keyframes orbit {
+  from { transform: translate(-50%, -50%) rotate(0deg) translateX(44px) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg) translateX(44px) rotate(-360deg); }
+}
+
+.art--shoot .art__shot {
+  position: absolute;
+  left: 52%;
+  bottom: 14px;
+  opacity: 0;
+}
+
+.art--shoot.is-playing .art__shot {
+  animation: shot-fly 0.9s 0.22s var(--snap);
+}
+
+@keyframes shot-fly {
+  0% { opacity: 1; transform: translate(0, 0); }
+  100% { opacity: 0; transform: translate(72px, -56px); }
+}
+
+.art--pass {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+
+.art--pass .art__pass-ball {
+  position: absolute;
+  left: 32%;
+  bottom: 16px;
+  opacity: 0;
+}
+
+.art--pass.is-playing .art__pass-ball {
+  animation: pass-fly 1s 0.2s var(--snap);
+}
+
+@keyframes pass-fly {
+  0% { opacity: 1; transform: translate(0, 0); }
+  50% { opacity: 1; transform: translate(26px, -26px); }
+  100% { opacity: 0; transform: translate(52px, 0); }
+}

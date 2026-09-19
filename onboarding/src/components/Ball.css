@@ -1,0 +1,13 @@
+.ball {
+  display: block;
+}
+
+.ball.is-spinning {
+  animation: ball-roll 0.55s linear infinite;
+}
+
+@keyframes ball-roll {
+  to {
+    transform: rotate(360deg);
+  }
+}
