@@ -14,7 +14,6 @@ from ctypes import Structure, c_double
 from typing import Any
 
 WINDOW_TITLE = "FIFA4ALL look axis"
-RESET_CONTROL_TITLE = "Reset"
 
 # NSWindowStyleMaskNonactivatingPanel
 _NONACTIVATING_PANEL = 1 << 7
@@ -29,7 +28,6 @@ _BUTTON_ON_OFF = 6
 _BEZEL_ROUNDED = 1
 _NS_ON = 1
 
-_RESET_PANEL: Any = None
 _RESET_BUTTON: Any = None
 
 
@@ -169,10 +167,10 @@ def parse_ns_frame(description: str) -> tuple[float, float, float, float] | None
 
 
 def _attach_reset_button(window: Any, _send: Any, _sel: Any, objc: Any) -> None:
-    """Child panel with a real NSButton. Receives clicks; parent is not click-through."""
+    """Put a real NSButton on the look-axis window. Parent is not click-through."""
 
-    global _RESET_PANEL, _RESET_BUTTON
-    from ctypes import c_bool, c_char_p, c_long, c_ulong, c_void_p
+    global _RESET_BUTTON
+    from ctypes import c_char_p, c_long, c_ulong, c_void_p
 
     def _nsstring(text: str) -> Any:
         return _send(
@@ -188,74 +186,40 @@ def _attach_reset_button(window: Any, _send: Any, _sel: Any, objc: Any) -> None:
         raw = _send(nsstr, "UTF8String", restype=c_char_p, argtypes=[])
         return raw.decode("utf-8") if raw else ""
 
-    if _RESET_PANEL is None:
-        panel = _send(objc.objc_getClass(b"NSPanel"), "alloc")
-        panel = _send(panel, "init")
-        if not panel:
-            return
-        mask = (1 << 0) | _NONACTIVATING_PANEL  # titled + nonactivating
-        _send(panel, "setStyleMask:", mask, restype=None, argtypes=[c_ulong])
-        _send(panel, "setTitle:", _nsstring(RESET_CONTROL_TITLE), argtypes=[c_void_p])
-        _send(panel, "setLevel:", _FLOATING_LEVEL, restype=None, argtypes=[c_long])
-        _send(panel, "setHidesOnDeactivate:", False, restype=None, argtypes=[c_bool])
-        _send(panel, "setIgnoresMouseEvents:", False, restype=None, argtypes=[c_bool])
-        _send(
-            panel,
-            "setCollectionBehavior:",
-            _COLLECTION,
-            restype=None,
-            argtypes=[c_ulong],
-        )
-        _send(panel, "setContentSize:", _NSSize(150, 48), argtypes=[_NSSize])
+    content = _send(window, "contentView")
+    if not content:
+        return
+    if _RESET_BUTTON is None:
         button = _send(objc.objc_getClass(b"NSButton"), "new")
         if not button:
             return
         _send(button, "setTitle:", _nsstring("Reset"), argtypes=[c_void_p])
         _send(button, "setButtonType:", _BUTTON_ON_OFF, restype=None, argtypes=[c_ulong])
         _send(button, "setBezelStyle:", _BEZEL_ROUNDED, restype=None, argtypes=[c_ulong])
-        _send(button, "setFrameSize:", _NSSize(140, 40), argtypes=[_NSSize])
-        _send(button, "setFrameOrigin:", _NSPoint(4, 4), argtypes=[_NSPoint])
-        content = _send(panel, "contentView")
-        if content:
-            _send(content, "addSubview:", button, restype=None, argtypes=[c_void_p])
-        _RESET_PANEL = panel
         _RESET_BUTTON = button
-
-    panel = _RESET_PANEL
-    frame_val = _send(window, "valueForKey:", _nsstring("frame"), argtypes=[c_void_p])
-    parsed = parse_ns_frame(_utf8(_send(frame_val, "description")) if frame_val else "")
+    button = _RESET_BUTTON
+    _send(button, "setFrameSize:", _NSSize(132, 36), argtypes=[_NSSize])
+    bounds_val = _send(content, "valueForKey:", _nsstring("bounds"), argtypes=[c_void_p])
+    parsed = parse_ns_frame(_utf8(_send(bounds_val, "description")) if bounds_val else "")
     if parsed:
-        px, py, pw, ph = parsed
+        _bw, _bh, width, height = parsed
         _send(
-            panel,
+            button,
             "setFrameOrigin:",
-            _NSPoint(px + max(8.0, pw - 158.0), py + max(8.0, ph - 54.0)),
+            _NSPoint(max(8.0, width - 140.0), max(8.0, height - 44.0)),
             argtypes=[_NSPoint],
         )
-    already_child = False
-    children = _send(window, "childWindows")
-    if children and panel:
-        count = int(_send(children, "count", restype=c_ulong, argtypes=[]) or 0)
-        for index in range(count):
-            child = _send(
-                children,
-                "objectAtIndex:",
-                index,
-                argtypes=[c_ulong],
-            )
-            if child == panel:
-                already_child = True
-                break
-    if not already_child:
-        _send(
-            window,
-            "addChildWindow:ordered:",
-            panel,
-            _WINDOW_ABOVE,
-            restype=None,
-            argtypes=[c_void_p, c_long],
-        )
-    _send(panel, "orderFrontRegardless", restype=None, argtypes=[])
+    else:
+        _send(button, "setFrameOrigin:", _NSPoint(8.0, 8.0), argtypes=[_NSPoint])
+    _send(
+        content,
+        "addSubview:positioned:relativeTo:",
+        button,
+        _WINDOW_ABOVE,
+        None,
+        restype=None,
+        argtypes=[c_void_p, c_long, c_void_p],
+    )
 
 
 def restore_chrome_focus() -> None:
