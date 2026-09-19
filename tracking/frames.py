@@ -54,6 +54,7 @@ FEATURE_UNITS: Mapping[str, str] = {
     "mouth_opening": "ratio",
     "head_turn": "normalized_x_offset",
     "head_tilt": "degrees",
+    "left_wink": "ratio_delta",
 }
 
 FEATURE_DOCUMENTATION = {
@@ -72,5 +73,11 @@ FEATURE_DOCUMENTATION = {
         "Angle of the eye-line in degrees. Positive values mean the user's "
         "right eye appears lower in the camera image. This assumes the camera "
         "is approximately level."
+    ),
+    "left_wink": (
+        "Right-eye openness minus left-eye openness, each normalized by face "
+        "width. Larger positive values mean the user's left eye appears more "
+        "closed than the right. This is a rough diagnostic measurement and is "
+        "sensitive to glasses, lighting, and partial occlusion."
     ),
 }

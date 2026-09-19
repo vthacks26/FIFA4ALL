@@ -13,6 +13,10 @@ BASE_POINTS = {
     "nose_tip": (0.50, 0.45),
     "left_eye": (0.38, 0.35),
     "right_eye": (0.62, 0.35),
+    "left_upper_eyelid": (0.38, 0.330),
+    "left_lower_eyelid": (0.38, 0.370),
+    "right_upper_eyelid": (0.62, 0.330),
+    "right_lower_eyelid": (0.62, 0.370),
 }
 
 
@@ -25,6 +29,7 @@ class FaceFeatureExtractorTests(unittest.TestCase):
         self.assertAlmostEqual(frame.features["mouth_opening"].value, 0.10)
         self.assertAlmostEqual(frame.features["head_turn"].value, 0.0)
         self.assertAlmostEqual(frame.features["head_tilt"].value, 0.0)
+        self.assertAlmostEqual(frame.features["left_wink"].value, 0.0)
 
     def test_head_turn_sign_uses_camera_image_direction(self):
         extractor = FaceFeatureExtractor(FeatureConfig(smoothing_alpha=1.0))
@@ -43,6 +48,16 @@ class FaceFeatureExtractorTests(unittest.TestCase):
         frame = extractor.from_named_points(points)
 
         self.assertAlmostEqual(frame.features["head_tilt"].value, math.degrees(math.atan2(0.12, 0.24)))
+
+    def test_left_wink_positive_when_left_eye_is_more_closed(self):
+        extractor = FaceFeatureExtractor(FeatureConfig(smoothing_alpha=1.0))
+        points = dict(BASE_POINTS)
+        points["left_upper_eyelid"] = (0.38, 0.345)
+        points["left_lower_eyelid"] = (0.38, 0.355)
+
+        frame = extractor.from_named_points(points)
+
+        self.assertGreater(frame.features["left_wink"].value, 0.0)
 
     def test_missing_landmark_marks_all_features_unavailable(self):
         extractor = FaceFeatureExtractor()

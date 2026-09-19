@@ -42,6 +42,10 @@ class FaceFeatureExtractor:
         "nose_tip",
         "left_eye",
         "right_eye",
+        "left_upper_eyelid",
+        "left_lower_eyelid",
+        "right_upper_eyelid",
+        "right_lower_eyelid",
     }
 
     def __init__(self, config: FeatureConfig | None = None) -> None:
@@ -97,10 +101,15 @@ class FaceFeatureExtractor:
         eye_dy = points["right_eye"][1] - points["left_eye"][1]
         head_tilt = degrees(atan2(eye_dy, eye_dx))
 
+        left_eye_opening = _distance(points["left_upper_eyelid"], points["left_lower_eyelid"]) / face_width
+        right_eye_opening = _distance(points["right_upper_eyelid"], points["right_lower_eyelid"]) / face_width
+        left_wink = right_eye_opening - left_eye_opening
+
         return {
             "mouth_opening": mouth_opening,
             "head_turn": head_turn,
             "head_tilt": head_tilt,
+            "left_wink": left_wink,
         }
 
     def _smooth(self, name: str, value: float) -> float:

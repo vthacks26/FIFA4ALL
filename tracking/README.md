@@ -19,6 +19,7 @@ Once `shared.MovementFrame` is published, adapt the boundary in one place instea
 | `mouth_opening` | `ratio` | Vertical upper-lip to lower-lip distance divided by cheek-to-cheek face width. Larger positive values mean a more open mouth. | Sensitive to lip occlusion, facial hair, facial expression, and large head turns. |
 | `head_turn` | `normalized_x_offset` | Nose-tip x offset from cheek midpoint divided by face width. Positive means the nose moved toward the user's right in the camera image. | Coarse 2D proxy, not true yaw. Camera angle and face shape affect values. |
 | `head_tilt` | `degrees` | Eye-line angle. Positive means the user's right eye appears lower in the camera image. | Assumes the camera is roughly level. Glasses, hair, and occlusion can affect landmarks. |
+| `left_wink` | `ratio_delta` | Right-eye openness minus left-eye openness, normalized by face width. Larger positive values mean the user's left eye appears more closed than the right. | Rough diagnostic only. Sensitive to glasses, shadows, eye shape, camera angle, and partial occlusion. |
 
 Do not equate landmark confidence with gesture reliability. Calibration must still ask the user what is comfortable.
 
@@ -46,6 +47,23 @@ python -m tracking.diagnostic
 ```
 
 The diagnostic opens a webcam preview, overlays live feature values, shows tracking status, and reports measured processing rate. Press `q` to quit. The camera is released on normal exit.
+
+For a live control-label preview that does not send keyboard input:
+
+```bash
+python -m tracking.control_preview
+```
+
+It displays suggested labels only:
+
+- head turn left/right: `A` / `D`
+- head tilt up/down: `W` / `S`
+- mouth open: `Space`
+- left wink: `L`
+
+These are temporary preview labels for tracking validation. Person 3 still owns real input adapters and action assignment.
+
+On macOS, the first run may trigger a camera permission prompt. If the preview cannot open camera index `0`, grant camera access to the terminal or Codex host in System Settings, then rerun the command.
 
 Testing notes to record on each teammate Mac:
 

@@ -8,11 +8,21 @@ before using this module on a Mac.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from dataclasses import dataclass
 from time import monotonic
 from typing import Any
 
 from tracking.features import FaceFeatureExtractor, FeatureConfig, Point
 from tracking.frames import FEATURE_UNITS, MovementFeature, MovementFrame
+
+
+@dataclass(frozen=True)
+class WebcamTrackingFrame:
+    """Camera image, movement features, and optional drawing landmarks."""
+
+    image: Any | None
+    movement: MovementFrame
+    landmarks: list[Any] | None = None
 
 
 class WebcamFaceTracker:
@@ -67,6 +77,10 @@ class WebcamFaceTracker:
             self._cv2.destroyAllWindows()
 
     def frames(self) -> Iterator[tuple[Any, MovementFrame]]:
+        for tracked in self.tracked_frames():
+            yield tracked.image, tracked.movement
+
+    def tracked_frames(self) -> Iterator[WebcamTrackingFrame]:
         if self._capture is None or self._face_mesh is None or self._cv2 is None:
             self.start()
 
@@ -77,7 +91,7 @@ class WebcamFaceTracker:
         while True:
             frame = self._read_fresh_frame()
             if frame is None:
-                yield None, _invalid_frame("camera_read_failed")
+                yield WebcamTrackingFrame(None, _invalid_frame("camera_read_failed"))
                 continue
 
             frame = self._resize(frame)
@@ -85,12 +99,13 @@ class WebcamFaceTracker:
             result = self._face_mesh.process(rgb)
             if not result.multi_face_landmarks:
                 self.extractor.reset()
-                yield frame, _invalid_frame("face_not_found")
+                yield WebcamTrackingFrame(frame, _invalid_frame("face_not_found"))
                 continue
 
             landmarks = result.multi_face_landmarks[0].landmark
             points = _mediapipe_points(landmarks)
-            yield frame, self.extractor.from_named_points(points, timestamp_monotonic=monotonic())
+            movement = self.extractor.from_named_points(points, timestamp_monotonic=monotonic())
+            yield WebcamTrackingFrame(frame, movement, landmarks)
 
     def _read_fresh_frame(self) -> Any | None:
         assert self._capture is not None
@@ -128,6 +143,10 @@ def _mediapipe_points(landmarks: list[Any]) -> dict[str, Point]:
         "nose_tip": _xy(landmarks[1]),
         "left_eye": _xy(landmarks[33]),
         "right_eye": _xy(landmarks[263]),
+        "left_upper_eyelid": _xy(landmarks[159]),
+        "left_lower_eyelid": _xy(landmarks[145]),
+        "right_upper_eyelid": _xy(landmarks[386]),
+        "right_lower_eyelid": _xy(landmarks[374]),
     }
 
 
