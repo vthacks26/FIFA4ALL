@@ -49,6 +49,14 @@ MPLCONFIGDIR=.cache/matplotlib python -m tracking.diagnostic
 
 The diagnostic opens a webcam preview, overlays live feature values, shows tracking status, and reports measured processing rate. Press `q` to quit. The camera is released on normal exit.
 
+For Quartz OS key holds into the frontmost app (Google Chrome / Luna), MacBook camera only, no preview window:
+
+```bash
+MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --no-preview
+```
+
+This uses the same nose-joystick / mouth-Space-hold / wink-L mapping as the preview, posted via `CGEventPost(kCGHIDEventTap)`.
+
 For a live control-label preview that does not send keyboard input:
 
 ```bash
