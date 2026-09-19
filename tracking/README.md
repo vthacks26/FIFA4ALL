@@ -84,7 +84,7 @@ The MediaPipe preview acts like a virtual joystick: the first valid nose point i
 
 These are temporary preview labels for tracking validation. Person 3 still owns real input adapters and action assignment.
 
-On macOS, the first run may trigger a camera permission prompt. If the preview cannot open camera index `0`, grant camera access to the terminal or Codex host in System Settings, then rerun the command.
+On macOS, live capture enumerates AVFoundation devices by name and opens only `MacBook Pro Camera` / FaceTime / built-in. It never opens or probes iPhone or Continuity Camera indexes — if OpenCV index `0` is the phone, that index is skipped. The first run may trigger a camera permission prompt for the Mac camera only. Grant camera access to the terminal or Codex host in System Settings, then rerun the command.
 
 If MediaPipe is unavailable on a teammate's Mac, use the lighter OpenCV nose fallback:
 

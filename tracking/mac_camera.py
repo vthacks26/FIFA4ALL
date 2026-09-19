@@ -46,7 +46,64 @@ def select_builtin_mac_camera(devices: Sequence[CameraDevice]) -> CameraDevice:
     )
 
 
+def allowed_opencv_indexes(devices: Sequence[CameraDevice]) -> list[int]:
+    """Indexes OpenCV may open. Never iPhone/Continuity — skip 0 when it is the phone."""
+
+    allowed: list[int] = []
+    for device in devices:
+        if name_is_phone(device.name, device.is_continuity):
+            continue
+        if not name_is_builtin_mac(device.name, device.is_continuity):
+            continue
+        allowed.append(device.index)
+    return allowed
+
+
+def skipped_phone_devices(devices: Sequence[CameraDevice]) -> list[CameraDevice]:
+    return [d for d in devices if name_is_phone(d.name, d.is_continuity)]
+
+
+def refuse_if_phone(device: CameraDevice) -> None:
+    if name_is_phone(device.name, device.is_continuity):
+        raise RuntimeError(
+            f"Refusing iPhone/Continuity camera index={device.index} name={device.name!r}"
+        )
+
+
+def resolve_mac_camera(
+    *,
+    camera_index: int = 0,
+    camera_name: str | None = None,
+    camera_unique_id: str | None = None,
+    devices: Sequence[CameraDevice] | None = None,
+) -> CameraDevice:
+    """Pick the built-in Mac camera. Skip iPhone/Continuity even if they are index 0."""
+
+    listed = list(devices) if devices is not None else list_avfoundation_devices()
+    if camera_unique_id:
+        for device in listed:
+            if device.unique_id == camera_unique_id:
+                refuse_if_phone(device)
+                return device
+    if camera_name:
+        for device in listed:
+            if device.name == camera_name:
+                refuse_if_phone(device)
+                if name_is_builtin_mac(device.name, device.is_continuity):
+                    return device
+    for device in listed:
+        if device.index != camera_index:
+            continue
+        if name_is_phone(device.name, device.is_continuity):
+            break
+        if name_is_builtin_mac(device.name, device.is_continuity):
+            return device
+    return select_builtin_mac_camera(listed)
+
+
 def list_avfoundation_devices() -> list[CameraDevice]:
+    """Name-only listing. Does not create inputs or open any device."""
+
     if sys.platform != "darwin":
         return []
     import ctypes

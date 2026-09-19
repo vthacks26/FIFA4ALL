@@ -23,7 +23,11 @@ from tracking.control_preview import (
     _nose_point,
     suggested_keys,
 )
-from tracking.mac_camera import list_avfoundation_devices, select_builtin_mac_camera
+from tracking.mac_camera import (
+    list_avfoundation_devices,
+    select_builtin_mac_camera,
+    skipped_phone_devices,
+)
 from tracking.mediapipe_tracker import WebcamFaceTracker
 from tracking.overlay import WINDOW_TITLE, decorate_overlay_window, restore_chrome_focus
 from tracking.quartz_keys import HeldKeySession, QuartzKeyInjector, labels_to_keys
@@ -86,6 +90,7 @@ def annotate_frame(
     labels: list[str],
     tracking_valid: bool,
     space_hold_seconds: float,
+    camera_name: str | None = None,
 ) -> object:
     """Draw face landmarks, WASD nose-joystick zones, and live key labels."""
 
@@ -96,15 +101,17 @@ def annotate_frame(
         _draw_landmarks(cv2, vis, landmarks)
         _draw_joystick(cv2, vis, joystick, landmarks, thresholds)
     charge = min(space_hold_seconds / thresholds.full_space_charge_seconds, 1.0)
-    _draw_lines(
-        cv2,
-        vis,
+    lines = []
+    if camera_name:
+        lines.append(f"camera: {camera_name}")
+    lines.extend(
         [
             f"tracking: {'valid' if tracking_valid else 'lost'}",
             f"keys: {', '.join(labels) if labels else '-'}",
             f"space hold: {space_hold_seconds:.2f}s ({charge * 100:.0f}%)",
-        ],
+        ]
     )
+    _draw_lines(cv2, vis, lines)
     return vis
 
 
@@ -128,14 +135,23 @@ def main(argv: list[str] | None = None) -> int:
     devices = list_avfoundation_devices()
     listing = ", ".join(f"{d.index}:{d.name!r}" for d in devices) or "(none)"
     print(f"AVFoundation cameras: {listing}", flush=True)
+    skipped = skipped_phone_devices(devices)
+    for phone in skipped:
+        print(
+            f"Skipping iPhone/Continuity index={phone.index} name={phone.name!r} "
+            "(will not probe)",
+            flush=True,
+        )
     try:
         chosen = select_builtin_mac_camera(devices)
     except RuntimeError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
+    if any(phone.index == 0 for phone in skipped):
+        print("OpenCV index 0 is a phone camera; skipping it.", flush=True)
     print(
         f"Using built-in Mac camera index={chosen.index} name={chosen.name!r} "
-        "(refusing iPhone/Continuity)",
+        "(refusing iPhone/Continuity; opening this named index only)",
         flush=True,
     )
 
@@ -163,12 +179,22 @@ def main(argv: list[str] | None = None) -> int:
     signal.signal(signal.SIGINT, _stop)
     signal.signal(signal.SIGTERM, _stop)
 
-    tracker = WebcamFaceTracker(camera_index=chosen.index, max_width=640)
+    tracker = WebcamFaceTracker(
+        camera_index=chosen.index,
+        camera_name=chosen.name,
+        camera_unique_id=chosen.unique_id,
+        max_width=640,
+    )
     try:
         tracker.start()
     except RuntimeError as exc:
         print(f"Could not start webcam tracking: {exc}", file=sys.stderr)
         return 2
+    print(
+        f"Capture confirmed name={tracker.opened_camera_name!r} "
+        f"index={tracker.camera_index}",
+        flush=True,
+    )
 
     thresholds = PreviewThresholds()
     joystick = NoseJoystickState()
@@ -225,6 +251,7 @@ def main(argv: list[str] | None = None) -> int:
                     labels=labels,
                     tracking_valid=tracking_valid,
                     space_hold_seconds=hold_s,
+                    camera_name=tracker.opened_camera_name,
                 )
                 cv2.namedWindow(WINDOW_TITLE, cv2.WINDOW_NORMAL)
                 cv2.imshow(WINDOW_TITLE, vis)

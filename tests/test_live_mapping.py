@@ -1,7 +1,14 @@
 import unittest
 
 from tracking.control_preview import PreviewThresholds, suggested_keys
-from tracking.mac_camera import CameraDevice, name_is_phone, select_builtin_mac_camera
+from tracking.mac_camera import (
+    CameraDevice,
+    allowed_opencv_indexes,
+    name_is_phone,
+    refuse_if_phone,
+    resolve_mac_camera,
+    select_builtin_mac_camera,
+)
 from tracking.quartz_keys import HeldKeySession, RecordingKeyInjector, labels_to_keys
 
 
@@ -62,6 +69,34 @@ class MacCameraTests(unittest.TestCase):
         self.assertTrue(name_is_phone("iPhone Camera", False))
         self.assertFalse(name_is_phone("MacBook Pro Camera", False))
 
+    def test_skips_opencv_index_zero_when_phone(self):
+        devices = [
+            CameraDevice(0, "iPhone (33) Camera", is_continuity=True),
+            CameraDevice(1, "MacBook Pro Camera", unique_id="mac-id"),
+        ]
+        self.assertEqual(allowed_opencv_indexes(devices), [1])
+        chosen = resolve_mac_camera(camera_index=0, devices=devices)
+        self.assertEqual(chosen.index, 1)
+        self.assertEqual(chosen.name, "MacBook Pro Camera")
+
+    def test_keeps_macbook_at_index_zero(self):
+        devices = [CameraDevice(0, "MacBook Pro Camera", unique_id="mac-id")]
+        self.assertEqual(allowed_opencv_indexes(devices), [0])
+        chosen = resolve_mac_camera(camera_index=0, devices=devices)
+        self.assertEqual(chosen.index, 0)
+
+    def test_resolve_by_unique_id_skips_phone(self):
+        devices = [
+            CameraDevice(0, "iPhone Camera", unique_id="phone-id", is_continuity=True),
+            CameraDevice(1, "FaceTime HD Camera", unique_id="face-id"),
+        ]
+        chosen = resolve_mac_camera(camera_unique_id="face-id", devices=devices)
+        self.assertEqual(chosen.name, "FaceTime HD Camera")
+        with self.assertRaises(RuntimeError):
+            resolve_mac_camera(camera_unique_id="phone-id", devices=devices)
+        with self.assertRaises(RuntimeError):
+            refuse_if_phone(devices[0])
+
 
 class AnnotateFrameTests(unittest.TestCase):
     def test_annotate_blank_frame_keeps_shape(self):
@@ -79,6 +114,7 @@ class AnnotateFrameTests(unittest.TestCase):
             labels=["W", "A"],
             tracking_valid=False,
             space_hold_seconds=0.0,
+            camera_name="MacBook Pro Camera",
         )
         self.assertEqual(vis.shape, blank.shape)
 
