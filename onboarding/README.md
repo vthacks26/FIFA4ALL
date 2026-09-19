@@ -45,7 +45,9 @@ the UI falls back to simulated input automatically.
 | `GET /config` | thresholds + direction/key mapping + whether video exists |
 | `GET /events` | Server-Sent Events stream of the control state |
 | `GET /stream.mjpg` | multipart MJPEG of the tracked camera frames |
-| `POST /calibrate` | set the current nose position as neutral |
+| `POST /calibrate` | set the current nose and resting mouth as neutral |
+| `POST /arm` | start sending real key events to the focused application |
+| `POST /disarm` | stop sending key events and release everything held |
 | `POST /mock` | drive the mock source (mock mode only) |
 
 Control state matches the contract in `TECHNICAL_SPEC.md`:
@@ -89,3 +91,52 @@ Characters are SVG with CSS animation (`src/components/Player.tsx`), which is
 tiers 2-3 of the fallback hierarchy in `TECHNICAL_SPEC.md`. They expose the
 required poses: idle, run, shoot, pass, receive, celebrate. Swapping in real
 low-poly 3D later only touches that one component; no control logic depends on it.
+
+## Match mode
+
+Once training is complete the second monitor becomes the match HUD, and the
+output layer turns control state into real key events.
+
+### Semantics
+
+| Gesture | Key | Behaviour |
+| --- | --- | --- |
+| Head direction | W A S D | held while the direction is active, released at centre |
+| Mouth open | Space | held while open, so longer open is a more powerful shot |
+| Wink | L | single tap; an eye held closed never repeats |
+
+### Before a match
+
+```bash
+# 1. confirm macOS will actually deliver synthetic keys
+.venv-mediapipe/bin/python -m output.selftest
+
+# 2. start the bridge, which begins DISARMED
+MPLCONFIGDIR=.cache/matplotlib .venv-mediapipe/bin/python -m bridge.server
+```
+
+If the self-test fails, grant Accessibility permission to the app running the
+bridge in System Settings > Privacy & Security > Accessibility and restart it.
+Without it macOS discards injected keys silently, which is the usual reason
+synthetic input does not reach Luna.
+
+### Running the demo
+
+1. A helper starts the match in Luna on Monitor 1. Head controls cannot navigate
+   menus, so hand over at kickoff.
+2. Click the game window so it owns the keyboard.
+3. On Monitor 2 press **Controls off** to arm. The HUD names the app receiving
+   keys, and warns in amber if anything else takes focus.
+
+### Safety
+
+Input is disarmed until asked. Losing tracking, disarming, or stopping the
+bridge releases every held key, so a lost face cannot leave the player running.
+
+### Drift
+
+Posture settles over a few minutes and the neutral centre moves with it, which
+makes the player walk with no input. If the nose holds still outside the dead
+zone for 3.5 seconds that is drift rather than intent, so neutral is re-set
+there and the HUD confirms it. The window is deliberately longer than a steering
+input is ever held perfectly still.
