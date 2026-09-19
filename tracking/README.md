@@ -65,13 +65,13 @@ These are temporary preview labels for tracking validation. Person 3 still owns 
 
 On macOS, the first run may trigger a camera permission prompt. If the preview cannot open camera index `0`, grant camera access to the terminal or Codex host in System Settings, then rerun the command.
 
-If MediaPipe is unavailable on a teammate's Mac, use the lighter OpenCV fallback:
+If MediaPipe is unavailable on a teammate's Mac, use the lighter OpenCV nose fallback:
 
 ```bash
 python -m tracking.haar_control_preview
 ```
 
-The fallback previews head movement with a face box and a rough open-mouth score. Wink is marked unavailable there; use the MediaPipe preview for wink once the model/runtime works on that Mac.
+The fallback previews only nose movement: forward is no key, nose left/right is `A`/`D`, and nose up/down is `W`/`S`. Mouth and wink are unavailable there; use the MediaPipe preview for those once the model/runtime works on that Mac.
 
 Testing notes to record on each teammate Mac:
 

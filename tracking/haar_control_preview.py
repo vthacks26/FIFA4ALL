@@ -1,4 +1,4 @@
-"""Lightweight OpenCV-only live control-label preview.
+"""Lightweight OpenCV-only nose control-label preview.
 
 This is a fallback diagnostic for Macs where MediaPipe Tasks are unavailable.
 It never sends keyboard input; it only shows suggested labels.
@@ -13,33 +13,31 @@ from time import monotonic
 
 
 @dataclass
-class NeutralFace:
-    center_x: float
-    center_y: float
-    width: float
-    height: float
+class NeutralNose:
+    rel_x: float
+    rel_y: float
 
 
 def main() -> int:
     import cv2  # type: ignore[import-not-found]
-    import numpy as np
-
     cascade_path = Path("models/haarcascade_frontalface_default.xml")
-    if not cascade_path.exists():
-        print(f"Missing {cascade_path}. Download the OpenCV frontal-face cascade first.")
+    nose_cascade_path = Path("models/haarcascade_mcs_nose.xml")
+    if not cascade_path.exists() or not nose_cascade_path.exists():
+        print("Missing OpenCV cascade files in models/.")
         return 2
 
     face_cascade = cv2.CascadeClassifier(str(cascade_path))
+    nose_cascade = cv2.CascadeClassifier(str(nose_cascade_path))
     capture = cv2.VideoCapture(0)
     capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     if not capture.isOpened():
         print("Could not open camera index 0. Check macOS camera permission for the terminal/Codex host.")
         return 2
 
-    neutral: NeutralFace | None = None
+    neutral: NeutralNose | None = None
     fps_samples: deque[float] = deque(maxlen=30)
     last_time = monotonic()
-    print("OpenCV fallback preview. No keyboard input will be sent. Press q to quit; press r to reset neutral.")
+    print("Nose tracking preview. No keyboard input will be sent. Press q to quit; press r to reset neutral.")
 
     try:
         while True:
@@ -59,34 +57,39 @@ def main() -> int:
             metrics = ["tracking: lost"]
             if len(faces):
                 x, y, w, h = max(faces, key=lambda box: box[2] * box[3])
-                cx = x + w / 2.0
-                cy = y + h / 2.0
-                if neutral is None:
-                    neutral = NeutralFace(cx, cy, w, h)
-
-                dx = (cx - neutral.center_x) / max(neutral.width, 1.0)
-                dy = (cy - neutral.center_y) / max(neutral.height, 1.0)
-                mouth_score = _mouth_dark_score(gray[y : y + h, x : x + w], np)
-
-                if dx <= -0.18:
-                    keys.append("A")
-                if dx >= 0.18:
-                    keys.append("D")
-                if dy <= -0.16:
-                    keys.append("W")
-                if dy >= 0.16:
-                    keys.append("S")
-                if mouth_score >= 0.18:
-                    keys.append("Space")
-
                 cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 220, 255), 2)
-                metrics = [
-                    "tracking: valid",
-                    f"head_dx: {dx:.3f}",
-                    f"head_dy: {dy:.3f}",
-                    f"mouth_score: {mouth_score:.3f}",
-                    "wink: unavailable in fallback",
-                ]
+                nose = _detect_nose(nose_cascade, gray[y : y + h, x : x + w])
+                if nose is not None:
+                    nx, ny, nw, nh = nose
+                    nose_cx = x + nx + nw / 2.0
+                    nose_cy = y + ny + nh / 2.0
+                    rel_x = (nose_cx - x) / max(w, 1.0)
+                    rel_y = (nose_cy - y) / max(h, 1.0)
+                    if neutral is None:
+                        neutral = NeutralNose(rel_x, rel_y)
+
+                    dx = rel_x - neutral.rel_x
+                    dy = rel_y - neutral.rel_y
+
+                    if dx <= -0.055:
+                        keys.append("A")
+                    if dx >= 0.055:
+                        keys.append("D")
+                    if dy <= -0.040:
+                        keys.append("W")
+                    if dy >= 0.035:
+                        keys.append("S")
+
+                    cv2.rectangle(frame, (x + nx, y + ny), (x + nx + nw, y + ny + nh), (255, 120, 40), 2)
+                    cv2.circle(frame, (int(nose_cx), int(nose_cy)), 4, (0, 255, 0), -1)
+                    metrics = [
+                        "tracking: valid",
+                        f"nose_dx: {dx:.3f}",
+                        f"nose_dy: {dy:.3f}",
+                        "forward: no key",
+                    ]
+                else:
+                    metrics = ["tracking: face_valid_nose_lost"]
 
             lines = [
                 f"preview keys: {', '.join(keys) if keys else '-'}",
@@ -96,7 +99,7 @@ def main() -> int:
             _draw_lines(cv2, frame, lines)
             print(f"\rkeys={'+'.join(keys) if keys else '-'} {metrics[0]}", end="")
 
-            cv2.imshow("OpenCV fallback control preview - q quit, r reset", frame)
+            cv2.imshow("Nose control preview - q quit, r reset", frame)
             key = cv2.waitKey(1) & 0xFF
             if key == ord("q"):
                 print()
@@ -116,13 +119,14 @@ def _resize(cv2: object, frame: object, max_width: int) -> object:
     return cv2.resize(frame, (max_width, int(height * scale)))
 
 
-def _mouth_dark_score(face_gray: object, np: object) -> float:
+def _detect_nose(nose_cascade: object, face_gray: object) -> tuple[int, int, int, int] | None:
     height, width = face_gray.shape[:2]
-    lower = face_gray[int(height * 0.58) : int(height * 0.88), int(width * 0.25) : int(width * 0.75)]
-    if lower.size == 0:
-        return 0.0
-    threshold = max(30.0, float(np.mean(lower) - np.std(lower)))
-    return float(np.mean(lower < threshold))
+    search = face_gray[int(height * 0.25) : int(height * 0.78), int(width * 0.20) : int(width * 0.80)]
+    noses = nose_cascade.detectMultiScale(search, scaleFactor=1.15, minNeighbors=4, minSize=(24, 24))
+    if len(noses) == 0:
+        return None
+    nx, ny, nw, nh = max(noses, key=lambda box: box[2] * box[3])
+    return (int(nx + width * 0.20), int(ny + height * 0.25), int(nw), int(nh))
 
 
 def _draw_lines(cv2: object, frame: object, lines: list[str]) -> None:
