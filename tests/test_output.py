@@ -18,6 +18,13 @@ from output.session import MOVEMENT_KEYS, PASS_KEY, SHOOT_KEY, TAP_SECONDS, Inpu
 from dataclasses import replace
 
 from tracking.bindings import ACTIONS, default_bindings
+from output.session import (
+    MOVEMENT_KEYS,
+    PASS_KEY,
+    SHOOT_KEY,
+    SHOOT_PRESS_DELAY_SECONDS,
+    InputSession,
+)
 
 
 def state(
@@ -41,6 +48,15 @@ def armed() -> tuple[InputSession, RecordingKeyboard]:
     session = InputSession(keyboard)
     session.arm()
     return (session, keyboard)
+
+
+def confirm_mouth(session: InputSession, start: float = 0.0) -> float:
+    """Keep the mouth open through the 200ms Space delay. Returns key-down time."""
+
+    session.apply(state(mouth=True), now=start)
+    down_at = start + SHOOT_PRESS_DELAY_SECONDS
+    session.apply(state(mouth=True), now=down_at)
+    return down_at
 
 
 class KeyCodeTests(unittest.TestCase):
@@ -101,6 +117,7 @@ class ArmingTests(unittest.TestCase):
     def test_disarming_releases_everything_held(self) -> None:
         session, keyboard = armed()
         session.apply(state(["W", "D"], mouth=True), now=0.0)
+        session.apply(state(["W", "D"], mouth=True), now=SHOOT_PRESS_DELAY_SECONDS)
         keyboard.reset()
         session.disarm()
         self.assertEqual(keyboard.held, set())
@@ -149,46 +166,75 @@ class MovementTests(unittest.TestCase):
 
 
 class ShootTests(unittest.TestCase):
-    def test_open_mouth_holds_space(self) -> None:
+    def test_open_mouth_does_not_press_space_immediately(self) -> None:
         session, keyboard = armed()
         session.apply(state(mouth=True), now=0.0)
+        self.assertEqual(keyboard.events, [])
+        self.assertNotIn(SHOOT_KEY, session.held_keys)
+
+    def test_closing_before_the_delay_never_presses_space(self) -> None:
+        session, keyboard = armed()
+        session.apply(state(mouth=True), now=0.0)
+        session.apply(state(mouth=False), now=SHOOT_PRESS_DELAY_SECONDS - 0.001)
+        self.assertEqual(keyboard.events, [])
+        self.assertEqual(session.held_keys, frozenset())
+
+    def test_space_goes_down_after_the_mouth_stays_open(self) -> None:
+        session, keyboard = armed()
+        confirm_mouth(session)
         self.assertEqual(keyboard.events, [("down", "Space")])
 
     def test_space_stays_down_while_the_mouth_is_open(self) -> None:
         session, keyboard = armed()
-        session.apply(state(mouth=True), now=0.0)
+        down_at = confirm_mouth(session)
         keyboard.reset()
-        session.apply(state(mouth=True), now=0.5)
+        session.apply(state(mouth=True), now=down_at + 0.3)
         self.assertEqual(keyboard.events, [])
         self.assertIn(SHOOT_KEY, session.held_keys)
 
     def test_closing_the_mouth_releases_space(self) -> None:
         session, keyboard = armed()
-        session.apply(state(mouth=True), now=0.0)
+        down_at = confirm_mouth(session)
         keyboard.reset()
-        session.apply(state(mouth=False), now=0.4)
+        session.apply(state(mouth=False), now=down_at + 0.2)
         self.assertEqual(keyboard.events, [("up", "Space")])
 
-    def test_shot_power_tracks_how_long_the_mouth_stayed_open(self) -> None:
+    def test_shot_power_starts_when_space_goes_down(self) -> None:
         session, _ = armed()
         session.apply(state(mouth=True), now=10.0)
-        session.apply(state(mouth=True), now=10.75)
-        self.assertAlmostEqual(session.shot_seconds, 0.75, places=3)
+        self.assertEqual(session.shot_seconds, 0.0)
+        down_at = 10.0 + SHOOT_PRESS_DELAY_SECONDS
+        session.apply(state(mouth=True), now=down_at)
+        self.assertEqual(session.shot_seconds, 0.0)
+        self.assertIn(SHOOT_KEY, session.held_keys)
+        session.apply(state(mouth=True), now=down_at + 0.55)
+        self.assertAlmostEqual(session.shot_seconds, 0.55, places=3)
 
     def test_shot_power_resets_after_release(self) -> None:
         session, _ = armed()
-        session.apply(state(mouth=True), now=0.0)
+        confirm_mouth(session)
         session.apply(state(mouth=True), now=0.6)
         session.apply(state(mouth=False), now=0.7)
         self.assertEqual(session.shot_seconds, 0.0)
 
     def test_a_second_shot_measures_from_its_own_start(self) -> None:
         session, _ = armed()
-        session.apply(state(mouth=True), now=0.0)
+        confirm_mouth(session, start=0.0)
         session.apply(state(mouth=False), now=1.0)
-        session.apply(state(mouth=True), now=5.0)
-        session.apply(state(mouth=True), now=5.2)
+        confirm_mouth(session, start=5.0)
+        session.apply(state(mouth=True), now=5.4)
         self.assertAlmostEqual(session.shot_seconds, 0.2, places=3)
+
+    def test_a_new_open_restarts_the_delay(self) -> None:
+        session, keyboard = armed()
+        session.apply(state(mouth=True), now=0.0)
+        session.apply(state(mouth=False), now=0.15)
+        reopen = 0.16
+        session.apply(state(mouth=True), now=reopen)
+        session.apply(state(mouth=True), now=reopen + SHOOT_PRESS_DELAY_SECONDS - 0.01)
+        self.assertEqual(keyboard.events, [])
+        session.apply(state(mouth=True), now=reopen + SHOOT_PRESS_DELAY_SECONDS)
+        self.assertEqual(keyboard.events, [("down", "Space")])
 
 
 class PassTests(unittest.TestCase):
@@ -219,8 +265,9 @@ class SafetyTests(unittest.TestCase):
     def test_tracking_loss_releases_every_held_key(self) -> None:
         session, keyboard = armed()
         session.apply(state(["W", "D"], mouth=True), now=0.0)
+        session.apply(state(["W", "D"], mouth=True), now=SHOOT_PRESS_DELAY_SECONDS)
         keyboard.reset()
-        session.apply(state(["W", "D"], mouth=True, tracking=False), now=0.1)
+        session.apply(state(["W", "D"], mouth=True, tracking=False), now=0.3)
         self.assertEqual(keyboard.held, set())
         self.assertTrue(all(event[0] == "up" for event in keyboard.events))
 
@@ -273,7 +320,9 @@ class BindingDrivenOutputTests(unittest.TestCase):
 
     def test_generic_channel_view_drives_shoot_without_the_legacy_key(self) -> None:
         session, keyboard = armed()
+        # Shoot has a 200ms press delay, so one frame is not yet a press.
         session.apply(bound_state(channel="mouth_open", active=True), now=0.0)
+        session.apply(bound_state(channel="mouth_open", active=True), now=0.25)
         self.assertIn(SHOOT_KEY, keyboard.held)
 
     def test_generic_channel_view_drives_pass_without_the_legacy_key(self) -> None:
@@ -287,6 +336,8 @@ class BindingDrivenOutputTests(unittest.TestCase):
         session = InputSession(keyboard, bindings=default_bindings().rebound("SHOOT", "wink"))
         session.arm()
         session.apply(bound_state(channel="wink", active=True), now=0.0)
+        session.apply(bound_state(channel="wink", active=True), now=0.25)
+        # The press delay follows the action, not the channel it moved to.
         self.assertIn(SHOOT_KEY, keyboard.held)
 
     def test_rebound_shoot_ignores_the_channel_it_left(self) -> None:
@@ -322,8 +373,11 @@ class BindingDrivenOutputTests(unittest.TestCase):
 
         session, keyboard = armed()
         session.apply(state(mouth=True, wink=True), now=0.0)
-        self.assertIn(SHOOT_KEY, keyboard.held)
+        # Pass has no press delay and is held from the first frame; shoot
+        # needs its 200ms before Space goes down.
         self.assertIn(PASS_KEY, keyboard.held)
+        session.apply(state(mouth=True, wink=True), now=0.25)
+        self.assertIn(SHOOT_KEY, keyboard.held)
 
 
 if __name__ == "__main__":

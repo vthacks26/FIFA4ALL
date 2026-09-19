@@ -31,10 +31,23 @@ class Action:
     key: str
     trigger: Trigger
     label: str
+    # How long the gesture must be held before the key goes down. Stops a
+    # brief gesture starting a charge at all. It belongs to the action rather
+    # than the gesture, so an action keeps its feel wherever it is rebound.
+    press_delay_seconds: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.press_delay_seconds < 0:
+            raise ValueError(f"{self.name}: press_delay_seconds cannot be negative")
 
 
 ACTIONS: Mapping[ActionName, Action] = {
-    "SHOOT": Action(name="SHOOT", key="Space", trigger="hold", label="Shoot"),
+    # 200ms before Space goes down, so a brief mouth-open never starts FIFA's
+    # charge curve. Once down it stays down; the curve is not pulsed or slowed.
+    "SHOOT": Action(
+        name="SHOOT", key="Space", trigger="hold", label="Shoot",
+        press_delay_seconds=0.2,
+    ),
     # Pass is a hold, not a tap: the wink holds L until the eye opens again.
     # Changed upstream in "Replace tongue-out reset with eyebrow raise"; the
     # `tap` trigger stays in the contract because it is still a legitimate

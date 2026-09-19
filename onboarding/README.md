@@ -116,7 +116,7 @@ output layer turns control state into real key events.
 | Gesture | Key | Behaviour |
 | --- | --- | --- |
 | Head direction | W A S D | held while the direction is active, released at centre |
-| Mouth open | Space | held while open, so longer open is a more powerful shot |
+| Mouth open | Space | Space after 200ms open; held while open, so longer open is a more powerful shot |
 | Wink | L | single tap; an eye held closed never repeats |
 
 ### Before a match

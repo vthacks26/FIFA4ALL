@@ -5,13 +5,17 @@ Semantics, decided from how EA Sports FC actually reads input:
 - Movement (W/A/S/D) is continuous. Keys stay down while a direction is active
   and release the moment the nose returns to centre.
 - Shooting is analogue. Its gesture holds Space, so a longer hold is a more
-  powerful shot, matching how FC charges a strike.
-- Passing is a hold. Its gesture holds L until the gesture ends.
+  powerful shot, matching how FC charges a strike. Space goes down only after
+  the gesture has been held for the action's press delay, 200ms for shoot; a
+  shorter gesture never presses. After that, FIFA's own charge curve runs —
+  no pulsing or extra slowing.
+- Passing is a hold. Its gesture holds L until the gesture ends, with no
+  press delay.
 
 Which gesture drives which action is not decided here. This module reads the
-action table in `tracking.bindings` for the key and the hold-vs-tap rule, and
-the active `BindingMap` for the channel to watch, so rebinding an action during
-orientation needs no change to the output layer.
+action table in `tracking.bindings` for the key, the hold-vs-tap rule and the
+press delay, and the active `BindingMap` for the channel to watch, so rebinding
+an action during orientation needs no change to the output layer.
 
 Safety is the priority over expressiveness: losing tracking, disarming, or
 exiting always releases every held key, so a lost face can never leave the
@@ -30,17 +34,18 @@ from tracking.controls import LEGACY_CHANNEL_KEYS
 
 MOVEMENT_KEYS = ("W", "A", "S", "D")
 
-# Kept so existing callers and tests keep importing a name rather than reaching
-# into the action table. They are now derived, not authoritative: the action
-# table decides the key.
 # How long a tap holds its key down. Long enough for the game to register a
 # discrete press, short enough that it never reads as a hold. No action uses
 # the tap trigger today -- pass became a hold upstream -- but the trigger is
 # still part of the action contract, so the timing lives here with it.
 TAP_SECONDS = 0.06
 
+# Kept so existing callers and tests keep importing a name rather than reaching
+# into the action table. All three are now derived, not authoritative: the
+# action table decides the key and the press delay.
 SHOOT_KEY = ACTIONS["SHOOT"].key
 PASS_KEY = ACTIONS["PASS"].key
+SHOOT_PRESS_DELAY_SECONDS = ACTIONS["SHOOT"].press_delay_seconds
 
 
 @dataclass
@@ -60,9 +65,13 @@ class InputSession:
     _tap_release_at: dict[str, float] = field(default_factory=dict)
     # When each hold action's current hold began, keyed by action name.
     _hold_started: dict[str, float] = field(default_factory=dict)
+    # When each action's gesture became active, which is earlier than the
+    # hold start whenever the action has a press delay.
+    _gesture_since: dict[str, float] = field(default_factory=dict)
     # Charge timer for the held action. SHOOT is the only action with a hold
     # trigger, so one timer is enough; a second hold action would need its own.
     _last_shot_started: float | None = None
+    _shoot_open_since: float | None = None
     shot_seconds: float = 0.0
 
     def arm(self) -> None:
@@ -79,6 +88,7 @@ class InputSession:
             self.keyboard.key_up(key)
         self._held.clear()
         self._last_shot_started = None
+        self._shoot_open_since = None
         self.shot_seconds = 0.0
 
     @property
@@ -148,26 +158,38 @@ class InputSession:
         return legacy if isinstance(legacy, dict) else {}
 
     def _apply_hold(self, action: Action, view: Mapping[str, object], now: float) -> None:
-        """Hold the key for as long as the gesture is active.
+        """Hold the key while the gesture is active, after its press delay.
 
-        Shot power in FC is charge duration, so the key must stay down for the
-        whole gesture rather than being tapped on its rising edge.
+        Shot power in FC is charge duration, so the key stays down for the
+        whole gesture rather than being tapped on its rising edge. The press
+        delay exists so a brief gesture never starts a charge at all; it is a
+        property of the action, not of the gesture, so an action keeps it
+        wherever it is rebound.
         """
 
-        if bool(view.get("active")):
-            if action.key not in self._held:
-                self._hold_started[action.name] = now
-            self._press(action.key)
-            held = now - self._hold_started.get(action.name, now)
-        else:
+        if not bool(view.get("active")):
+            self._gesture_since.pop(action.name, None)
             self._release(action.key)
             self._hold_started.pop(action.name, None)
-            held = 0.0
+            if action.name == "SHOOT":
+                self._last_shot_started = None
+                self.shot_seconds = 0.0
+            return
+
+        since = self._gesture_since.setdefault(action.name, now)
+        if now < since + action.press_delay_seconds:
+            # Active, but not yet held long enough to commit to a press.
+            return
+
+        if action.key not in self._held:
+            self._hold_started[action.name] = now
+        self._press(action.key)
+        held = now - self._hold_started.get(action.name, now)
         if action.name == "SHOOT":
-            # Shot power is charge duration, and it belongs to SHOOT alone.
-            # Every hold action keeps its own start time: pass is also a hold
-            # since it moved off the tap trigger, and sharing one timer let it
-            # zero the shot charge on the same frame the shot was building.
+            # Charge is measured from key-down, not from the gesture starting,
+            # so the press delay is not counted as charge. Shot power belongs
+            # to SHOOT alone: every hold action keeps its own start time, and
+            # sharing one timer let pass zero the charge mid-shot.
             self._last_shot_started = self._hold_started.get(action.name)
             self.shot_seconds = held
 
