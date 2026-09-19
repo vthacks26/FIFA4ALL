@@ -38,6 +38,19 @@ def test_mouth_open_taps_space_once():
     assert taps[0].key == "SPACE"
 
 
+def test_wink_holds_l_then_releases():
+    pipeline, backend = make_pipeline()
+    state = pipeline.process(HeadPose(0, 0, 0), 0.0, left_ear=0.10, right_ear=0.30)
+    assert state.wink_held is True
+    assert pipeline.keyboard.held == frozenset({"L"})
+    pipeline.process(HeadPose(0, 0, 0), 0.0, left_ear=0.30, right_ear=0.30)
+    assert pipeline.keyboard.held == frozenset()
+    presses = [e for e in backend.events if e.action == "press"]
+    releases = [e for e in backend.events if e.action == "release"]
+    assert presses[0].key == "L"
+    assert releases[0].key == "L"
+
+
 def test_diagonal_label():
     pipeline, _ = make_pipeline()
     state = pipeline.process(HeadPose(yaw=25.0, pitch=-25.0, roll=0.0), 0.0)
