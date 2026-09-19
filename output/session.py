@@ -110,7 +110,7 @@ class InputSession:
 
         if self._shoot_open_since is None:
             self._shoot_open_since = now
-        if now - self._shoot_open_since < SHOOT_PRESS_DELAY_SECONDS:
+        if now < self._shoot_open_since + SHOOT_PRESS_DELAY_SECONDS:
             return
 
         if SHOOT_KEY not in self._held:

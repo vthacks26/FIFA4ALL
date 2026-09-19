@@ -199,9 +199,11 @@ class ShootTests(unittest.TestCase):
         session, _ = armed()
         session.apply(state(mouth=True), now=10.0)
         self.assertEqual(session.shot_seconds, 0.0)
-        session.apply(state(mouth=True), now=10.2)
+        down_at = 10.0 + SHOOT_PRESS_DELAY_SECONDS
+        session.apply(state(mouth=True), now=down_at)
         self.assertEqual(session.shot_seconds, 0.0)
-        session.apply(state(mouth=True), now=10.75)
+        self.assertIn(SHOOT_KEY, session.held_keys)
+        session.apply(state(mouth=True), now=down_at + 0.55)
         self.assertAlmostEqual(session.shot_seconds, 0.55, places=3)
 
     def test_shot_power_resets_after_release(self) -> None:
@@ -223,10 +225,11 @@ class ShootTests(unittest.TestCase):
         session, keyboard = armed()
         session.apply(state(mouth=True), now=0.0)
         session.apply(state(mouth=False), now=0.15)
-        session.apply(state(mouth=True), now=0.16)
-        session.apply(state(mouth=True), now=0.35)
+        reopen = 0.16
+        session.apply(state(mouth=True), now=reopen)
+        session.apply(state(mouth=True), now=reopen + SHOOT_PRESS_DELAY_SECONDS - 0.01)
         self.assertEqual(keyboard.events, [])
-        session.apply(state(mouth=True), now=0.36)
+        session.apply(state(mouth=True), now=reopen + SHOOT_PRESS_DELAY_SECONDS)
         self.assertEqual(keyboard.events, [("down", "Space")])
 
 
