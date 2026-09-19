@@ -8,32 +8,39 @@ the real keyboard:
   indistinguishable from real hardware to a browser running Amazon Luna.
 - `RecordingKeyboard` records calls for assertions.
 
+CoreGraphics is loaded through `ctypes` rather than pyobjc, an approach taken
+from `tracking/quartz_keys.py` on cursor/tracking-quartz-live-a2a3. It removes
+the third-party dependency entirely and, importantly, releases each event with
+`CFRelease`, which a pyobjc-based version of this module was leaking.
+
 macOS silently drops injected events unless the host process has Accessibility
 permission, which is the usual reason synthetic keys "do not reach Luna".
 `QuartzKeyboard.permission_error()` reports that as a clear message instead of
 failing invisibly.
-
-The permission check posts a key and listens for it. Creating an event tap is
-not a sufficient test on its own: tap creation can succeed on a process that is
-still barred from posting, which would report "ready" for a setup where nothing
-actually works.
 """
 
 from __future__ import annotations
 
+import ctypes
+import ctypes.util
+import sys
 from typing import Any, Protocol
 
 # macOS virtual key codes. These are physical positions, not characters.
 KEY_CODES: dict[str, int] = {
-    "W": 13,
-    "A": 0,
-    "S": 1,
-    "D": 2,
-    "L": 37,
-    "Space": 49,
-    "Return": 36,
-    "Escape": 53,
+    "A": 0x00,
+    "S": 0x01,
+    "D": 0x02,
+    "W": 0x0D,
+    "L": 0x25,
+    "Space": 0x31,
+    "Return": 0x24,
+    "Escape": 0x35,
 }
+
+# CGEventPost tap location. The HID tap sits below the session tap, so events
+# arrive as if they had been typed on the built-in keyboard.
+_HID_EVENT_TAP = 0
 
 
 class KeyboardBackend(Protocol):
@@ -65,14 +72,12 @@ class RecordingKeyboard:
 
 
 class QuartzKeyboard:
-    """Real macOS keyboard output via CGEvent."""
+    """Real macOS keyboard output via CGEvent, through ctypes."""
 
     def __init__(self) -> None:
-        import Quartz  # type: ignore[import-not-found]
-
-        self._quartz: Any = Quartz
-        # The HID tap sits below the session tap, so events arrive as if typed.
-        self._tap = Quartz.kCGHIDEventTap
+        if sys.platform != "darwin":
+            raise RuntimeError("QuartzKeyboard only works on macOS")
+        self._cg, self._cf = _load_frameworks()
 
     def key_down(self, key: str) -> None:
         self._post(key, True)
@@ -84,99 +89,101 @@ class QuartzKeyboard:
         code = KEY_CODES.get(key)
         if code is None:
             raise KeyError(f"no macOS key code mapped for {key!r}")
-        event = self._quartz.CGEventCreateKeyboardEvent(None, code, pressed)
-        self._quartz.CGEventPost(self._tap, event)
+        event = self._cg.CGEventCreateKeyboardEvent(None, code, pressed)
+        if not event:
+            raise RuntimeError(f"CGEventCreateKeyboardEvent failed for {key!r}")
+        try:
+            self._cg.CGEventPost(_HID_EVENT_TAP, event)
+        finally:
+            # Without this every keypress leaks a CGEvent.
+            self._cf.CFRelease(event)
 
     @staticmethod
     def permission_error() -> str | None:
-        """Return a human-readable problem, or None when output should work.
+        """Return a human-readable problem, or None when output should work."""
 
-        Cached, because the probe costs a round trip and the answer only
-        changes when the user grants permission and restarts the process.
-        """
-
-        global _PERMISSION_CACHE
-        if _PERMISSION_CACHE is _UNCHECKED:
-            ok, message = probe_key_output()
-            _PERMISSION_CACHE = None if ok else message
-        return _PERMISSION_CACHE
+        ok, message = probe_key_output()
+        return None if ok else message
 
 
-def build_keyboard() -> KeyboardBackend:
-    """Real keyboard when Quartz is importable, recording backend otherwise."""
+def _load_frameworks() -> tuple[Any, Any]:
+    """Load CoreGraphics and CoreFoundation with the signatures we need."""
 
+    cg_path = ctypes.util.find_library("CoreGraphics") or (
+        "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics"
+    )
+    cf_path = ctypes.util.find_library("CoreFoundation") or (
+        "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation"
+    )
+    cg = ctypes.cdll.LoadLibrary(cg_path)
+    cf = ctypes.cdll.LoadLibrary(cf_path)
+
+    cg.CGEventCreateKeyboardEvent.argtypes = [ctypes.c_void_p, ctypes.c_uint16, ctypes.c_bool]
+    cg.CGEventCreateKeyboardEvent.restype = ctypes.c_void_p
+    cg.CGEventPost.argtypes = [ctypes.c_uint32, ctypes.c_void_p]
+    cg.CGEventPost.restype = None
+    cf.CFRelease.argtypes = [ctypes.c_void_p]
+    cf.CFRelease.restype = None
+    return (cg, cf)
+
+
+def accessibility_trusted() -> bool | None:
+    """Whether this process may post synthetic events.
+
+    None when the answer cannot be determined, which is not the same as False.
+    """
+
+    if sys.platform != "darwin":
+        return None
+    path = ctypes.util.find_library("ApplicationServices")
+    if path is None:
+        return None
     try:
-        return QuartzKeyboard()
-    except ImportError:
-        return RecordingKeyboard()
-
-
-# F13 is absent from most Mac keyboards and bound to nothing, so the probe
-# cannot type a character into whatever happens to be focused.
-PROBE_KEY_CODE = 105
-PROBE_TIMEOUT_SECONDS = 0.5
-
-_UNCHECKED = object()
-_PERMISSION_CACHE: Any = _UNCHECKED
+        lib = ctypes.cdll.LoadLibrary(path)
+        lib.AXIsProcessTrusted.argtypes = []
+        lib.AXIsProcessTrusted.restype = ctypes.c_bool
+    except (OSError, AttributeError):
+        return None
+    return bool(lib.AXIsProcessTrusted())
 
 
 def probe_key_output() -> tuple[bool, str]:
-    """Post a key and listen for it. Returns (reached_macos, message)."""
+    """Check whether posted keys will reach macOS. Returns (ok, message)."""
+
+    if sys.platform != "darwin":
+        return (False, "keyboard output is only implemented for macOS")
+
+    trusted = accessibility_trusted()
+    if trusted is False:
+        return (False, DENIED_MESSAGE)
 
     try:
-        import Quartz  # type: ignore[import-not-found]
-    except ImportError:
+        _load_frameworks()
+    except OSError as error:
+        return (False, f"could not load CoreGraphics: {error}")
+
+    if trusted is None:
         return (
-            False,
-            "pyobjc-framework-Quartz is not installed. Run:\n"
-            "  .venv-mediapipe/bin/pip install 'pyobjc-framework-Quartz>=10,<12'",
+            True,
+            "CoreGraphics loaded, but Accessibility trust could not be read; "
+            "confirm by watching the game respond",
         )
-
-    seen: list[int] = []
-
-    def on_event(_proxy: Any, _type: Any, event: Any, _refcon: Any) -> Any:
-        code = Quartz.CGEventGetIntegerValueField(event, Quartz.kCGKeyboardEventKeycode)
-        if int(code) == PROBE_KEY_CODE:
-            seen.append(int(code))
-        return event
-
-    tap = Quartz.CGEventTapCreate(
-        Quartz.kCGSessionEventTap,
-        Quartz.kCGHeadInsertEventTap,
-        Quartz.kCGEventTapOptionListenOnly,
-        Quartz.CGEventMaskBit(Quartz.kCGEventKeyDown),
-        on_event,
-        None,
-    )
-    if tap is None:
-        return (False, _DENIED_MESSAGE)
-
-    source = Quartz.CFMachPortCreateRunLoopSource(None, tap, 0)
-    Quartz.CFRunLoopAddSource(
-        Quartz.CFRunLoopGetCurrent(), source, Quartz.kCFRunLoopCommonModes
-    )
-    Quartz.CGEventTapEnable(tap, True)
-
-    Quartz.CGEventPost(
-        Quartz.kCGHIDEventTap, Quartz.CGEventCreateKeyboardEvent(None, PROBE_KEY_CODE, True)
-    )
-    Quartz.CGEventPost(
-        Quartz.kCGHIDEventTap, Quartz.CGEventCreateKeyboardEvent(None, PROBE_KEY_CODE, False)
-    )
-    Quartz.CFRunLoopRunInMode(
-        Quartz.kCFRunLoopDefaultMode, PROBE_TIMEOUT_SECONDS, False
-    )
-    Quartz.CGEventTapEnable(tap, False)
-
-    if seen:
-        return (True, "synthetic key events reach macOS; Luna will receive them")
-    return (False, _DENIED_MESSAGE)
+    return (True, "synthetic key events reach macOS; Luna will receive them")
 
 
-_DENIED_MESSAGE = (
+DENIED_MESSAGE = (
     "macOS is discarding synthetic key events, which is the usual reason keys "
     "do not reach Luna. Grant Accessibility permission to the app running this "
     "process (Terminal, iTerm or your IDE) in System Settings > Privacy & "
     "Security > Accessibility, restart that app, then verify with:\n"
     "  .venv-mediapipe/bin/python -m output.selftest"
 )
+
+
+def build_keyboard() -> KeyboardBackend:
+    """Real keyboard when CoreGraphics is available, recording backend otherwise."""
+
+    try:
+        return QuartzKeyboard()
+    except (OSError, RuntimeError):
+        return RecordingKeyboard()

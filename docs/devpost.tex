@@ -1,0 +1,144 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{hyperref}
+\usepackage{enumitem}
+
+\hypersetup{colorlinks=true, urlcolor=blue}
+
+\title{FIFA4ALL\\[0.4em]
+\large Devpost copy --- VTHacks accessibility hack}
+\author{vthacks26 / FIFA4ALL}
+\date{}
+
+\begin{document}
+\maketitle
+
+\noindent
+Paste the sections below into Devpost, or compile this file with
+\texttt{pdflatex docs/devpost.tex}. Commands and mappings match the
+\texttt{cursor/tracking-quartz-live-a2a3} live path
+(\texttt{python -m tracking.live}); they are not invented extras.
+
+% ---------------------------------------------------------------------------
+\section{Tagline}
+% Devpost tagline field. 131 characters (limit 200).
+% ---------------------------------------------------------------------------
+
+Primary (133 characters, Devpost limit 200):
+
+\begin{verbatim}
+FIFA4ALL is a VTHacks accessibility hack: play EA Sports FC on Amazon Luna using face, head, mouth, and wink instead of a controller.
+\end{verbatim}
+
+Shorter variant (120 characters):
+
+\begin{verbatim}
+Different bodies. Same pitch. Play EA Sports FC on Amazon Luna with head look, mouth, and wink — no controller required.
+\end{verbatim}
+
+% ---------------------------------------------------------------------------
+\section{Elevator pitch}
+% ---------------------------------------------------------------------------
+
+Most sports games assume two hands, a controller, and a body that can mash
+buttons for ninety minutes. FIFA4ALL does not. We turn a MacBook webcam into
+the pad: look left/right/up/down to hold WASD, open your mouth to hold Space
+(shoot), wink to hold L (pass). Those OS-level key holds go into Google
+Chrome running Amazon Luna, so you are playing real EA Sports FC --- not a
+toy soccer demo --- without touching a keyboard or a DualShock.
+
+The first valid face is your neutral stance. Sit up, tap the orange RESET on
+the \texttt{FIFA4ALL look axis} overlay, then play. If tracking is lost,
+every key comes up. It is a VTHacks accessibility MVP: different bodies,
+same pitch.
+
+% ---------------------------------------------------------------------------
+\section{About the project}
+% ---------------------------------------------------------------------------
+
+\subsection*{What it is}
+
+FIFA4ALL is an accessibility project for VTHacks. The long-term idea is that
+the interface should adapt to the user's remaining mobility instead of
+forcing the user to adapt to a controller. The hackathon build is the
+smallest version of that idea that still looks like \emph{FIFA}: webcam face
+tracking on a Mac, mapped to the simplified EA Sports FC keyboard layout,
+injected into Amazon Luna in Chrome.
+
+We specifically wanted the real game. A custom soccer prototype reads as a
+computer-vision demo. EA Sports FC on Luna reads as: you are actually
+playing FIFA with your face.
+
+\subsection*{How you play}
+
+Live capture opens only the built-in \textbf{MacBook Pro Camera} (FaceTime /
+built-in). It refuses iPhone and Continuity Camera indexes so a phone in the
+room cannot become the tracker.
+
+From the repository root, after a Python 3.12 venv and
+\texttt{pip install -r tracking/requirements.txt}:
+
+\begin{verbatim}
+MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --preview
+\end{verbatim}
+
+Headless (same holds, no overlay):
+
+\begin{verbatim}
+MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --no-preview
+\end{verbatim}
+
+Open Chrome, launch Luna, start EA FC, and \textbf{click the game} so it is
+focused. Quartz HID events
+(\texttt{CGEventPost}) land on whatever is frontmost.
+
+\begin{description}[style=nextline,leftmargin=1.5em]
+  \item[Look / head (nose joystick)]
+    WASD holds. The first valid nose point is center; returning to center
+    releases movement.
+  \item[Mouth open]
+    Space hold --- shoot for as long as the mouth stays open.
+  \item[Wink]
+    L hold --- pass while the wink is detected.
+\end{description}
+
+The preview window is titled \texttt{FIFA4ALL look axis}. Sit straight and
+tap the orange \textbf{RESET} control to recapture a neutral pose. macOS
+must grant \textbf{Camera} and \textbf{Accessibility} to Terminal / Python
+or the camera will not open and key holds may be dropped.
+
+Exclusive fullscreen covers the overlay; press Esc to leave it if you need
+the HUD or RESET.
+
+\subsection*{Why this mapping}
+
+EA Sports FC on Luna can be played with a tiny keyboard set: move, shoot,
+pass. That let us skip virtual gamepads and the browser Gamepad API. MediaPipe
+Face Mesh (not a separate Tasks landmarker) measures a nose look-axis, mouth
+opening, and an eye-wink signal; the live module holds the matching keys until
+the gesture ends. Combinations work (look while shooting). Face lost means
+all keys released --- safer than a stuck W into the advertising boards.
+
+\subsection*{Who it is for}
+
+Anyone who can sit in view of a laptop camera and move their head, mouth, or
+eyes, but who cannot --- or would rather not --- use two analog sticks. It is
+not yet a per-user calibration product and it is not a medical device. It is
+a working hands-free path into a game people already recognize, built in a
+weekend so more people can share the same pitch.
+
+\subsection*{Links}
+
+Repository:
+\url{https://github.com/vthacks26/FIFA4ALL}
+
+Live branch / pull request:
+\url{https://github.com/vthacks26/FIFA4ALL/pull/4}
+
+Install and run details live in the root \texttt{README.md} on
+\texttt{cursor/tracking-quartz-live-a2a3}.
+
+\end{document}

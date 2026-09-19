@@ -70,6 +70,16 @@ class ControlThresholds:
     mouth_min_gap: float = 0.030
     wink_on: float = 0.025
     wink_off: float = 0.015
+    # Eyelids do not close in sync, so mid-blink the left/right difference
+    # spikes well past wink_on and reads as a wink. Measured on a real blink:
+    # left 0.0043 against right 0.0551, a difference of 0.0508, double the
+    # threshold. What separates the two is the other eye: during a wink it
+    # stays properly open, during a blink it is already closing. A wink is
+    # only accepted while the open eye is above this fraction of the openness
+    # measured for this user at calibration.
+    eye_open_fraction: float = 0.65
+    # Used until calibration measures the user. Typical open eye reads ~0.10.
+    eye_open_floor: float = 0.070
     dwell_seconds: float = 1.0
 
     def __post_init__(self) -> None:
@@ -85,6 +95,10 @@ class ControlThresholds:
             raise ValueError("mouth_min_gap must be positive")
         if self.wink_off >= self.wink_on:
             raise ValueError("wink_off must be below wink_on")
+        if not 0.0 < self.eye_open_fraction < 1.0:
+            raise ValueError("eye_open_fraction must be between 0 and 1")
+        if self.eye_open_floor <= 0:
+            raise ValueError("eye_open_floor must be positive")
         if self.y_scale <= 0:
             raise ValueError("y_scale must be positive")
         if not 0.0 <= self.angle_margin < 22.5:
@@ -110,6 +124,8 @@ class ControlThresholds:
             "mouth_min_gap": self.mouth_min_gap,
             "wink_on": self.wink_on,
             "wink_off": self.wink_off,
+            "eye_open_fraction": self.eye_open_fraction,
+            "eye_open_floor": self.eye_open_floor,
             "dwell_seconds": self.dwell_seconds,
         }
 
@@ -170,6 +186,7 @@ class ControlStateMachine:
     thresholds: ControlThresholds = field(default_factory=ControlThresholds)
     center: tuple[float, float] | None = None
     mouth_rest: float | None = None
+    eye_rest: float | None = None
     auto_recentre: bool = True
     recentred: bool = False
     _moving: bool = False
@@ -185,7 +202,11 @@ class ControlStateMachine:
         self._wink = _EdgeTrigger(self.thresholds.wink_on, self.thresholds.wink_off)
 
     def calibrate(
-        self, nose: tuple[float, float] | None, *, mouth_rest: float | None = None
+        self,
+        nose: tuple[float, float] | None,
+        *,
+        mouth_rest: float | None = None,
+        eye_rest: float | None = None,
     ) -> None:
         """Set the neutral centre, and optionally the resting mouth baseline.
 
@@ -198,6 +219,8 @@ class ControlStateMachine:
         if mouth_rest is not None:
             self.mouth_rest = mouth_rest
             self._apply_mouth_thresholds()
+        if eye_rest is not None:
+            self.eye_rest = eye_rest
         self._moving = False
         self._direction = None
         self._still_since = None
@@ -259,7 +282,12 @@ class ControlStateMachine:
         # leaves the difference near zero, so it still does not fire.
         signed_wink = features.get("left_wink")
         wink_value = None if signed_wink is None else abs(signed_wink)
-        self._wink_eye = _wink_eye(signed_wink, self.thresholds.wink_off)
+        if wink_value is not None and not self._one_eye_still_open(features):
+            # Both eyes are closing: this is a blink, not a wink.
+            wink_value = 0.0
+        self._wink_eye = (
+            None if wink_value == 0.0 else _wink_eye(signed_wink, self.thresholds.wink_off)
+        )
         _, mouth_fired = self._mouth.update(mouth_value, moment)
         _, wink_fired = self._wink.update(wink_value, moment)
 
@@ -291,6 +319,27 @@ class ControlStateMachine:
                 candidate = self._direction
         self._moving = True
         self._direction = candidate
+
+    def eye_open_gate(self) -> float:
+        """Openness the non-winking eye must clear for a wink to count."""
+
+        if self.eye_rest is None:
+            return self.thresholds.eye_open_floor
+        return max(
+            self.thresholds.eye_open_floor * 0.5,
+            self.eye_rest * self.thresholds.eye_open_fraction,
+        )
+
+    def _one_eye_still_open(self, features: Mapping[str, float]) -> bool:
+        """True when one eye is clearly open, which a blink never satisfies."""
+
+        left = features.get("left_eye_opening")
+        right = features.get("right_eye_opening")
+        if left is None or right is None:
+            # Without absolute openings we cannot tell the two apart; keep the
+            # previous behaviour rather than silently dropping every wink.
+            return True
+        return max(left, right) >= self.eye_open_gate()
 
     def _apply_mouth_thresholds(self) -> None:
         """Lift the mouth thresholds clear of this person's resting value."""

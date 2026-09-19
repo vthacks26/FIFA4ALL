@@ -55,6 +55,8 @@ FEATURE_UNITS: Mapping[str, str] = {
     "head_turn": "normalized_x_offset",
     "head_tilt": "degrees",
     "left_wink": "ratio_delta",
+    "left_eye_opening": "ratio",
+    "right_eye_opening": "ratio",
 }
 
 FEATURE_DOCUMENTATION = {
@@ -78,6 +80,18 @@ FEATURE_DOCUMENTATION = {
         "Right-eye openness minus left-eye openness, each normalized by face "
         "width. Larger positive values mean the user's left eye appears more "
         "closed than the right. This is a rough diagnostic measurement and is "
-        "sensitive to glasses, lighting, and partial occlusion."
+        "sensitive to glasses, lighting, and partial occlusion. On its own it "
+        "cannot separate a wink from a blink, because eyelids do not close in "
+        "sync: mid-blink this difference spikes. Pair it with the absolute "
+        "openings below."
+    ),
+    "left_eye_opening": (
+        "Left eyelid gap divided by face width. Around 0.10 with the eye open "
+        "and near 0.00 closed, varying by face, so compare against a value "
+        "measured for this user rather than a constant."
+    ),
+    "right_eye_opening": (
+        "Right eyelid gap divided by face width. Same scale and caveats as "
+        "left_eye_opening."
     ),
 }

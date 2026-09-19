@@ -23,7 +23,7 @@ import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from time import monotonic
-from typing import Any
+from typing import Any, Callable
 
 from bridge.source import ControlSource, MockSource, WebcamSource
 from output.focus import frontmost_application, game_has_focus
@@ -43,7 +43,7 @@ class ControlHub:
 
     # Listing on-screen windows is not free, so the frontmost application is
     # sampled a few times a second rather than on every tracked frame.
-    FOCUS_POLL_SECONDS = 0.4
+    FOCUS_POLL_SECONDS = 1.0
 
     def __init__(self, source: ControlSource, session: InputSession) -> None:
         self.source = source
@@ -58,10 +58,19 @@ class ControlHub:
         self._stopped = False
 
     def start(self) -> None:
-        thread = threading.Thread(target=self._run, name="control-hub", daemon=True)
+        """Run the capture loop on a background thread."""
+
+        thread = threading.Thread(target=self.run, name="control-hub", daemon=True)
         thread.start()
 
-    def _run(self) -> None:
+    def run(self, on_frame: "Callable[[dict[str, object]], None] | None" = None) -> None:
+        """Run the capture loop on the calling thread.
+
+        `on_frame` is called with each published state. macOS requires window
+        drawing to happen on the main thread, so the overlay is rendered here
+        rather than from a worker.
+        """
+
         try:
             for state, frame in self.source.frames():
                 if self._stopped:
@@ -76,6 +85,8 @@ class ControlHub:
                         self._frame = frame
                     self._sequence += 1
                     self._lock.notify_all()
+                if on_frame is not None:
+                    on_frame(state)
         except Exception as exc:  # surfaced to the UI instead of dying silently
             with self._lock:
                 self._error = f"{type(exc).__name__}: {exc}"
@@ -264,6 +275,11 @@ def main() -> int:
     parser.add_argument("--mock", action="store_true", help="run without a webcam")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--camera", type=int, default=0)
+    parser.add_argument(
+        "--overlay",
+        action="store_true",
+        help="float a look-axis window above the game for the player",
+    )
     args = parser.parse_args()
 
     source: ControlSource = MockSource() if args.mock else WebcamSource(camera_index=args.camera)
@@ -284,14 +300,44 @@ def main() -> int:
     else:
         banner.append("  keyboard output verified: synthetic keys reach macOS")
     print("\n".join(banner), flush=True)
+
+    # The HTTP server is threaded so the capture loop owns the main thread,
+    # which macOS requires for any window drawing.
+    threading.Thread(target=server.serve_forever, name="bridge-http", daemon=True).start()
     try:
-        server.serve_forever()
+        hub.run(on_frame=_build_overlay(hub) if args.overlay else None)
     except KeyboardInterrupt:
         print("\nstopping")
     finally:
         hub.stop()
         server.shutdown()
     return 0
+
+
+def _build_overlay(hub: ControlHub) -> "Callable[[dict[str, object]], None]":
+    """Render the player-facing look-axis window, if OpenCV is available."""
+
+    import cv2  # type: ignore[import-not-found]
+
+    from bridge.overlay_view import draw_overlay
+    from tracking.overlay import WINDOW_TITLE, decorate_overlay_window, poll_reset_click
+
+    state_box: dict[str, bool] = {"decorated": False}
+
+    def render(state: dict[str, object]) -> None:
+        source = hub.source
+        frame = getattr(source, "last_frame", None)
+        if frame is None:
+            return
+        cv2.imshow(WINDOW_TITLE, draw_overlay(cv2, frame, state, source.thresholds))
+        cv2.waitKey(1)
+        if not state_box["decorated"]:
+            # Must happen after the first imshow, once the window exists.
+            state_box["decorated"] = decorate_overlay_window(WINDOW_TITLE)
+        if poll_reset_click():
+            source.calibrate()
+
+    return render
 
 
 if __name__ == "__main__":

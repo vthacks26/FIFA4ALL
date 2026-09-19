@@ -110,6 +110,8 @@ class FaceFeatureExtractor:
             "head_turn": head_turn,
             "head_tilt": head_tilt,
             "left_wink": left_wink,
+            "left_eye_opening": left_eye_opening,
+            "right_eye_opening": right_eye_opening,
         }
 
     def _smooth(self, name: str, value: float) -> float:

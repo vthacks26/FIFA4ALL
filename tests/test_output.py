@@ -7,7 +7,13 @@ from __future__ import annotations
 
 import unittest
 
-from output.keyboard import KEY_CODES, RecordingKeyboard, build_keyboard
+from output.keyboard import (
+    KEY_CODES,
+    RecordingKeyboard,
+    accessibility_trusted,
+    build_keyboard,
+    probe_key_output,
+)
 from output.session import MOVEMENT_KEYS, PASS_KEY, SHOOT_KEY, TAP_SECONDS, InputSession
 
 
@@ -48,6 +54,34 @@ class KeyCodeTests(unittest.TestCase):
         keyboard = build_keyboard()
         self.assertTrue(hasattr(keyboard, "key_down"))
         self.assertTrue(hasattr(keyboard, "key_up"))
+
+    def test_codes_agree_with_the_tracking_injector(self) -> None:
+        """Two key injectors live in this repo; they must not disagree."""
+
+        from tracking.quartz_keys import LABEL_TO_KEY, MAC_VIRTUAL_KEYCODES
+
+        for label, name in LABEL_TO_KEY.items():
+            with self.subTest(label=label):
+                self.assertEqual(KEY_CODES[label], MAC_VIRTUAL_KEYCODES[name])
+
+
+class PermissionProbeTests(unittest.TestCase):
+    """The probe must never claim output works when macOS would discard it."""
+
+    def test_accessibility_trusted_returns_a_tristate(self) -> None:
+        self.assertIn(accessibility_trusted(), (True, False, None))
+
+    def test_probe_reports_a_reason_when_it_fails(self) -> None:
+        ok, message = probe_key_output()
+        self.assertIsInstance(ok, bool)
+        self.assertTrue(message, "a failing probe must explain itself")
+
+    def test_untrusted_process_is_reported_as_blocked(self) -> None:
+        if accessibility_trusted() is not False:
+            self.skipTest("this process already has Accessibility permission")
+        ok, message = probe_key_output()
+        self.assertFalse(ok)
+        self.assertIn("Accessibility", message)
 
 
 class ArmingTests(unittest.TestCase):

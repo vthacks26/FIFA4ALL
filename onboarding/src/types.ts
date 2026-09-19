@@ -54,6 +54,10 @@ export interface Thresholds {
   readonly mouth_reset: number;
   readonly wink_on: number;
   readonly wink_off: number;
+  /** A wink only counts while the other eye stays this open, so blinks are
+   *  rejected: eyelids close out of sync and briefly look like a wink. */
+  readonly eye_open_fraction: number;
+  readonly eye_open_floor: number;
   readonly dwell_seconds: number;
 }
 
@@ -110,6 +114,8 @@ export const DEFAULT_THRESHOLDS: Thresholds = {
   mouth_reset: 0.06,
   wink_on: 0.025,
   wink_off: 0.015,
+  eye_open_fraction: 0.65,
+  eye_open_floor: 0.07,
   dwell_seconds: 1.0,
 };
 

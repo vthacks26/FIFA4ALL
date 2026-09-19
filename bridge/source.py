@@ -122,6 +122,9 @@ class WebcamSource(ControlSource):
         self.jpeg_quality = jpeg_quality
         self._tracker: Any | None = None
         self._recalibrate = False
+        # Latest mirrored BGR frame, for the on-screen overlay. The MJPEG bytes
+        # are no use there because the overlay draws before encoding.
+        self.last_frame: Any | None = None
 
     def calibrate(self) -> None:
         # Defer to the capture loop so the center comes from a tracked frame.
@@ -145,9 +148,17 @@ class WebcamSource(ControlSource):
             }
 
             if self._recalibrate and nose is not None:
-                # Sample the resting mouth at the same moment as neutral, so the
-                # shoot latch releases reliably for this particular face.
-                self.machine.calibrate(nose, mouth_rest=values.get("mouth_opening"))
+                # Sample the resting mouth and open-eye width at the same moment
+                # as neutral, so the shoot latch releases reliably and a blink is
+                # never mistaken for a wink on this particular face.
+                left = values.get("left_eye_opening")
+                right = values.get("right_eye_opening")
+                eye_rest = max(left, right) if left is not None and right is not None else None
+                self.machine.calibrate(
+                    nose,
+                    mouth_rest=values.get("mouth_opening"),
+                    eye_rest=eye_rest,
+                )
                 self._recalibrate = False
             state = self.machine.update(
                 nose=nose,
@@ -159,6 +170,7 @@ class WebcamSource(ControlSource):
             if tracked.image is not None:
                 # Mirror the image so the user sees themselves as in a mirror.
                 mirrored = cv2.flip(tracked.image, 1)
+                self.last_frame = mirrored
                 ok, buffer = cv2.imencode(".jpg", mirrored, encode_params)
                 if ok:
                     jpeg = buffer.tobytes()

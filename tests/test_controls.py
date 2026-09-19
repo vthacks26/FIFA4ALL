@@ -384,6 +384,100 @@ class WinkEdgeTriggerTests(unittest.TestCase):
         self.assertIsNone(self.wink(machine(), 0.0)["wink"]["eye"])
 
 
+class BlinkRejectionTests(unittest.TestCase):
+    """Eyelids do not close in sync, so a blink briefly looks like a wink."""
+
+    # Captured from a real blink on a MacBook FaceTime camera, as
+    # (left_eye_opening, right_eye_opening) normalized by face width. Frame
+    # four is the problem: the left eye is shut while the right lags half
+    # open, a difference of 0.0508 against a 0.025 threshold.
+    REAL_BLINK = [
+        (0.0874, 0.0939),
+        (0.0499, 0.0578),
+        (0.0162, 0.0328),
+        (0.0043, 0.0551),
+        (0.0626, 0.0702),
+    ]
+    EYE_REST = 0.11
+
+    def calibrated(self) -> ControlStateMachine:
+        state = ControlStateMachine()
+        state.calibrate(CENTER, eye_rest=self.EYE_REST)
+        return state
+
+    def eyes(self, left: float, right: float) -> dict[str, float]:
+        return {
+            "mouth_opening": 0.0,
+            "left_wink": right - left,
+            "left_eye_opening": left,
+            "right_eye_opening": right,
+        }
+
+    def test_a_real_blink_never_fires_a_pass(self) -> None:
+        state = self.calibrated()
+        for index, (left, right) in enumerate(self.REAL_BLINK):
+            result = state.update(
+                nose=CENTER, features=self.eyes(left, right),
+                tracking_valid=True, now=index * 0.033,
+            )
+            self.assertFalse(
+                result["wink"]["fired"], f"blink frame {index} fired a pass"
+            )
+
+    def test_the_worst_blink_frame_alone_does_not_fire(self) -> None:
+        """This frame's difference is double the wink threshold."""
+
+        result = self.calibrated().update(
+            nose=CENTER, features=self.eyes(0.0043, 0.0551), tracking_valid=True, now=0.0
+        )
+        self.assertFalse(result["wink"]["fired"])
+        self.assertIsNone(result["wink"]["eye"])
+
+    def test_a_genuine_wink_still_fires(self) -> None:
+        """One eye shut while the other stays properly open."""
+
+        result = self.calibrated().update(
+            nose=CENTER, features=self.eyes(0.005, 0.11), tracking_valid=True, now=0.0
+        )
+        self.assertTrue(result["wink"]["fired"])
+        self.assertEqual(result["wink"]["eye"], "left")
+
+    def test_a_genuine_right_wink_still_fires(self) -> None:
+        result = self.calibrated().update(
+            nose=CENTER, features=self.eyes(0.11, 0.005), tracking_valid=True, now=0.0
+        )
+        self.assertTrue(result["wink"]["fired"])
+        self.assertEqual(result["wink"]["eye"], "right")
+
+    def test_gate_scales_to_a_narrow_eyed_user(self) -> None:
+        """A user whose open eye reads low must still be able to wink."""
+
+        state = ControlStateMachine()
+        state.calibrate(CENTER, eye_rest=0.06)
+        result = state.update(
+            nose=CENTER, features=self.eyes(0.003, 0.06), tracking_valid=True, now=0.0
+        )
+        self.assertTrue(result["wink"]["fired"])
+
+    def test_uncalibrated_gate_uses_the_documented_floor(self) -> None:
+        state = ControlStateMachine()
+        self.assertEqual(state.eye_open_gate(), state.thresholds.eye_open_floor)
+
+    def test_missing_eye_openings_do_not_drop_every_wink(self) -> None:
+        """Older feature payloads lack the absolute openings."""
+
+        state = self.calibrated()
+        result = state.update(
+            nose=CENTER, features={"mouth_opening": 0.0, "left_wink": 0.1},
+            tracking_valid=True, now=0.0,
+        )
+        self.assertTrue(result["wink"]["fired"])
+
+    def test_eye_open_fraction_must_be_a_fraction(self) -> None:
+        with self.assertRaises(ValueError):
+            ControlThresholds(eye_open_fraction=1.0)
+
+
 class TrackingLossTests(unittest.TestCase):
     def test_tracking_loss_releases_all_movement_keys(self) -> None:
         state = machine()
