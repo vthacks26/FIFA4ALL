@@ -1,6 +1,6 @@
 # FIFA4ALL
 
-Play EA Sports FC on Amazon Luna with your face instead of a controller. Look with your head for WASD, open your mouth to shoot (Space hold), wink to pass (L hold).
+Play EA Sports FC on Amazon Luna with your face instead of a controller. Look with your head for WASD, open your mouth to shoot (Space hold after 200ms), wink to pass (L hold).
 
 This is a VTHacks accessibility hack. The live product on `main` injects macOS Quartz HID key holds into the focused app (Google Chrome running Luna).
 
@@ -87,7 +87,7 @@ You do not need to recreate `.venv` or reinstall unless you deleted it.
 | Gesture | Key (held) | In-game (simplified FC) |
 | --- | --- | --- |
 | Nose / head look axis (leave the center deadzone) | `W` `A` `S` `D` | Move |
-| Mouth open | `Space` | Shoot (hold while the mouth stays open) |
+| Mouth open | `Space` | Shoot (Space after the mouth stays open 200ms; hold while it stays open) |
 | Wink (either eye; blinks rejected) | `L` | Pass (hold while the wink is detected) |
 | Raised eyebrows | — | Recentre / recalibrate pose (same as overlay RESET and `POST /calibrate`) |
 
@@ -107,7 +107,7 @@ More tracking notes: [`tracking/README.md`](tracking/README.md). Orientation scr
 
 ## Gesture notes
 
-- **Shooting** holds Space while the mouth is open, so a longer open is a more powerful shot. Calibration samples the resting mouth, because a mouth at rest does not read zero and a fixed threshold can latch Space open permanently.
+- **Shooting** waits 200ms after mouth-open is detected (open/reset hysteresis still applies) before holding Space, so FIFA's charge does not start on a brief open. If the mouth closes before 200ms, Space is never pressed. After Space is down, a longer open is a more powerful shot. Calibration samples the resting mouth, because a mouth at rest does not read zero and a fixed threshold can latch Space open permanently.
 - **Passing** accepts either eye. A blink is rejected by requiring the other eye to stay open.
 - **Recentre** by raising your eyebrows (or overlay **RESET** / website **Find your center**). Detection is the brow-to-eyelid gap above the resting value sampled on the first valid face and again on click-calibrate, so a normal open mouth used for shoot does not reset. The trigger is edge-latched: a held raise fires once until you lower your brows.
 - **Movement** releases every key when tracking is lost, so a lost face cannot leave the player running.

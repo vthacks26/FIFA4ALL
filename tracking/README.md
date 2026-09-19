@@ -72,7 +72,7 @@ Headless inject (same UI server, no overlay, no browser — keeps Luna focused):
 MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --no-preview
 ```
 
-This uses the same nose-joystick / mouth-Space-hold / wink-L mapping as the preview, posted via `CGEventPost(kCGHIDEventTap)`.
+This uses the same nose-joystick / mouth-Space-hold / wink-L mapping as the preview, posted via `CGEventPost(kCGHIDEventTap)`. Live inject waits 200ms after mouth-open is detected before Space key-down; a shorter open never presses. Wink / L is unchanged.
 
 For a live control-label preview that does not send keyboard input:
 
@@ -89,7 +89,7 @@ It displays suggested labels only:
 
 The MediaPipe preview acts like a virtual joystick: the first valid nose point is neutral, returning to center means no movement, and pressing `r` resets the neutral center.
 
-`Space` remains active while the mouth stays above the open threshold. The preview also shows `space hold` seconds and a capped charge percentage so the input adapter can later translate a longer mouth-open hold into a longer in-game shot press.
+`Space` remains active while the mouth stays above the open threshold. Live `InputSession` still waits 200ms of that open before the key-down, so FIFA charge does not start on a flicker. The preview also shows `space hold` seconds and a capped charge percentage so the input adapter can later translate a longer mouth-open hold into a longer in-game shot press.
 
 These are temporary preview labels for tracking validation. Person 3 still owns real input adapters and action assignment.
 
