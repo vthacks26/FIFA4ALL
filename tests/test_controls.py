@@ -123,6 +123,45 @@ class HysteresisTests(unittest.TestCase):
         self.assertTrue(result["centered"])
 
 
+class ZoneHysteresisTests(unittest.TestCase):
+    """A nose resting on a zone boundary must not flap between directions."""
+
+    def offset_at(self, degrees_ccw: float, radius: float = 0.12) -> tuple[float, float]:
+        from math import cos, radians, sin
+
+        angle = radians(degrees_ccw)
+        # Image y grows downward, so negate to treat degrees as compass-style.
+        return at(radius * cos(angle), -radius * sin(angle))
+
+    def test_direction_holds_just_past_the_zone_boundary(self) -> None:
+        state = machine()
+        state.update(nose=self.offset_at(90.0), features=NEUTRAL, tracking_valid=True)
+        self.assertEqual(state._direction, "N")
+        # 60 degrees is raw NE, but still inside N once widened by the margin.
+        result = state.update(nose=self.offset_at(60.0), features=NEUTRAL, tracking_valid=True)
+        self.assertEqual(result["direction"], "N", "should not flap on the boundary")
+
+    def test_direction_changes_once_the_margin_is_cleared(self) -> None:
+        state = machine()
+        state.update(nose=self.offset_at(90.0), features=NEUTRAL, tracking_valid=True)
+        result = state.update(nose=self.offset_at(50.0), features=NEUTRAL, tracking_valid=True)
+        self.assertEqual(result["direction"], "NE", "a deliberate move must still turn")
+
+    def test_fresh_entry_uses_the_plain_classifier(self) -> None:
+        # Same angle the held-direction test uses, but with no prior direction,
+        # so the margin does not apply and the raw zone wins.
+        state = machine()
+        result = state.update(nose=self.offset_at(60.0), features=NEUTRAL, tracking_valid=True)
+        self.assertEqual(result["direction"], "NE")
+
+    def test_margin_must_stay_inside_half_a_zone(self) -> None:
+        with self.assertRaises(ValueError):
+            ControlThresholds(angle_margin=22.5)
+
+    def test_margin_is_published_to_the_ui(self) -> None:
+        self.assertIn("angle_margin", ControlThresholds().as_dict())
+
+
 class MouthEdgeTriggerTests(unittest.TestCase):
     def test_crossing_the_threshold_fires_once(self) -> None:
         state = machine()

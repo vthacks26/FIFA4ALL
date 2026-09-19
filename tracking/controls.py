@@ -47,6 +47,10 @@ class ControlThresholds:
     enter_radius: float = 0.045
     exit_radius: float = 0.062
     y_scale: float = 1.15
+    # Degrees a held direction keeps past its 45-degree zone before handing
+    # over. Without this the nose resting on a boundary flaps between, say, N
+    # and NE, which stutters movement in game.
+    angle_margin: float = 9.0
     mouth_open: float = 0.090
     mouth_reset: float = 0.060
     wink_on: float = 0.025
@@ -64,6 +68,8 @@ class ControlThresholds:
             raise ValueError("wink_off must be below wink_on")
         if self.y_scale <= 0:
             raise ValueError("y_scale must be positive")
+        if not 0.0 <= self.angle_margin < 22.5:
+            raise ValueError("angle_margin must be within half a zone")
 
     def as_dict(self) -> dict[str, float]:
         """Publish thresholds to the UI so it can draw truthful zones."""
@@ -72,6 +78,7 @@ class ControlThresholds:
             "enter_radius": self.enter_radius,
             "exit_radius": self.exit_radius,
             "y_scale": self.y_scale,
+            "angle_margin": self.angle_margin,
             "mouth_open": self.mouth_open,
             "mouth_reset": self.mouth_reset,
             "wink_on": self.wink_on,
@@ -191,12 +198,18 @@ class ControlStateMachine:
 
         radius = hypot(offset[0], offset[1] * self.thresholds.y_scale)
         boundary = self.thresholds.enter_radius if self._moving else self.thresholds.exit_radius
-        if radius >= boundary:
-            self._moving = True
-            self._direction = classify_direction(offset)
-        else:
+        if radius < boundary:
             self._moving = False
             self._direction = None
+            return
+
+        candidate = classify_direction(offset)
+        if self._direction is not None and candidate != self._direction:
+            # Hold the current zone until the nose clears its widened boundary.
+            if _within_zone(offset, self._direction, self.thresholds.angle_margin):
+                candidate = self._direction
+        self._moving = True
+        self._direction = candidate
 
     def _state(
         self,
@@ -229,6 +242,20 @@ class ControlStateMachine:
             },
             "tracking": tracking,
         }
+
+
+ZONE_CENTERS: Mapping[Direction, float] = {
+    "E": 0.0, "NE": 45.0, "N": 90.0, "NW": 135.0,
+    "W": 180.0, "SW": 225.0, "S": 270.0, "SE": 315.0,
+}
+
+
+def _within_zone(offset: tuple[float, float], direction: Direction, margin: float) -> bool:
+    """True when the offset still falls inside a zone widened by `margin`."""
+
+    angle = degrees(atan2(-offset[1], offset[0])) % 360.0
+    delta = abs((angle - ZONE_CENTERS[direction] + 180.0) % 360.0 - 180.0)
+    return delta <= 22.5 + margin
 
 
 def _confidence(value: float | None, threshold: float) -> float:
