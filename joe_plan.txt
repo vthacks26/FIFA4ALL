@@ -1,0 +1,1235 @@
+Here’s the updated onboarding doc with the new FIFA4ALL MVP, Luna setup, One Button findings, and EyeCraft-inspired control mapping folded in.
+
+# FIFA4ALL
+
+## Team & Agent Onboarding
+
+### Tagline
+
+**Different bodies. Same pitch.**
+
+### One-line vision
+
+**FIFA4ALL lets people play EA Sports FC using body movements instead of a traditional controller, starting with head movement and facial gestures and eventually adapting controls to each user's remaining mobility.**
+
+---
+
+# 1. What we are building
+
+FIFA4ALL is an accessibility project for VTHacks centered around soccer and adaptive input.
+
+The long-term idea is:
+
+> **The interface should adapt to the user's body instead of forcing the user's body to adapt to the interface.**
+
+The hackathon MVP is intentionally much simpler:
+
+> **Use a webcam to detect head and facial movements and convert them into keyboard controls that can play EA Sports FC through Amazon Luna.**
+
+For the first working version:
+
+```text
+Head movement
+→ WASD
+
+Mouth gesture
+→ Space
+
+Optional secondary gesture
+→ L
+```
+
+This should allow someone to play FC using the game's simplified controls without touching a keyboard or controller.
+
+---
+
+# 2. Why FIFA / EA Sports FC
+
+We specifically want to use the real game rather than a custom soccer demo.
+
+That decision is inspired by EyeCraft.
+
+EyeCraft was compelling partly because it let someone interact with **Minecraft**, a game everyone already recognizes.
+
+The same principle applies here.
+
+If we show:
+
+> a custom soccer game controlled with head movements
+
+the reaction is:
+
+> “Cool computer vision project.”
+
+If we show:
+
+> **EA Sports FC being played hands-free**
+
+the reaction becomes:
+
+> “Wait, you're actually playing FIFA with your face?”
+
+That is a significantly stronger demo.
+
+Recognition removes explanation cost.
+
+The audience already understands how FIFA normally works.
+
+---
+
+# 3. Inspiration: EyeCraft
+
+Reference repo:
+
+`qihongw08/eyecraft-mod`
+
+EyeCraft combines:
+
+* webcam input
+* MediaPipe / OpenCV
+* head tracking
+* facial-expression recognition
+* Minecraft-specific control logic
+
+Its controls include things such as:
+
+```text
+Head direction
+→ camera control
+
+Mouth "O"
+→ forward
+
+Facial expression
+→ jump
+
+Winks
+→ clicks
+
+Head tilt
+→ inventory/navigation
+```
+
+The important architectural lesson is:
+
+```text
+camera
+↓
+landmark detection
+↓
+gesture interpretation
+↓
+game command
+```
+
+FIFA4ALL can reuse the first three conceptual layers.
+
+The game-specific output changes completely.
+
+---
+
+# 4. EyeCraft vs FIFA4ALL
+
+EyeCraft:
+
+```text
+Webcam
+↓
+MediaPipe / OpenCV
+↓
+gesture classifier
+↓
+Java / Fabric mod
+↓
+Minecraft
+```
+
+FIFA4ALL:
+
+```text
+Webcam
+↓
+MediaPipe / OpenCV
+↓
+gesture classifier
+↓
+keyboard events
+↓
+Amazon Luna
+↓
+EA Sports FC
+```
+
+For the MVP, this is substantially simpler.
+
+We do not need:
+
+* Minecraft
+* Fabric
+* Java game modification
+* inventory logic
+* crafting
+* voice commands
+* direct game-state manipulation
+
+The output layer just needs to produce normal keyboard presses.
+
+---
+
+# 5. Current MVP
+
+## Goal
+
+A user can play EA Sports FC without touching the keyboard.
+
+The minimum controls are:
+
+```text
+Head up
+→ W
+
+Head left
+→ A
+
+Head down
+→ S
+
+Head right
+→ D
+
+Mouth "O"
+→ Space
+```
+
+Optional:
+
+```text
+Wink / smile / another expression
+→ L
+```
+
+The exact purpose of L should match whatever FC interaction is useful in the final Luna control configuration.
+
+---
+
+# 6. Why this became easier
+
+Originally, we assumed FIFA4ALL would need to emulate an Xbox controller.
+
+That would require:
+
+```text
+computer vision
+↓
+virtual gamepad
+↓
+browser Gamepad API
+↓
+Luna
+↓
+EA FC
+```
+
+On macOS, virtual gamepad creation can be annoying.
+
+However, we discovered that for the simplified FC setup we care about, the controls are effectively:
+
+```text
+WASD
+Space
+L
+```
+
+Therefore we can instead do:
+
+```text
+computer vision
+↓
+keyboard injection
+↓
+browser
+↓
+Amazon Luna
+↓
+EA FC
+```
+
+That is much more straightforward.
+
+Keyboard injection is now the preferred MVP path.
+
+---
+
+# 7. Cloud setup
+
+Everyone on the team uses MacBooks.
+
+EA Sports FC does not run natively on macOS.
+
+Therefore we plan to use:
+
+# Amazon Luna
+
+The intended environment:
+
+```text
+MacBook
+↓
+browser
+↓
+Amazon Luna
+↓
+EA account
+↓
+EA Sports FC
+```
+
+FIFA4ALL runs locally on the Mac:
+
+```text
+webcam
+↓
+local CV app
+↓
+keyboard events
+↓
+Luna browser session
+```
+
+This avoids needing a Windows gaming PC for the first demo.
+
+---
+
+# 8. EA FC simplified controls
+
+EA Sports FC supports simplified control layouts.
+
+For our MVP, the useful insight is that we do not need to reproduce a full Xbox controller.
+
+We can rely on FC to automate much of the complexity.
+
+Instead of supporting:
+
+* multiple pass types
+* finesse shots
+* through balls
+* sprint modifiers
+* player switching
+* skill moves
+* multiple defensive actions
+* multiple analog sticks
+
+we initially expose only a few inputs.
+
+FC handles the rest through its simplified control system.
+
+That is ideal for accessibility.
+
+---
+
+# 9. MVP user experience
+
+The first version should be extremely simple.
+
+Start FIFA4ALL.
+
+Camera appears.
+
+User centers their head.
+
+System establishes neutral position.
+
+Then:
+
+```text
+look up
+→ W
+
+look down
+→ S
+
+look left
+→ A
+
+look right
+→ D
+```
+
+When the user forms an “O” with their mouth:
+
+```text
+Space
+```
+
+The camera view should show:
+
+* face landmarks
+* detected head direction
+* currently active keyboard command
+
+Example:
+
+```text
+HEAD: LEFT
+
+OUTPUT:
+A
+```
+
+This makes debugging and demos much easier.
+
+---
+
+# 10. Head tracking
+
+Head tracking should be continuous but interpreted into discrete keyboard directions.
+
+Example:
+
+```text
+yaw < -threshold
+→ A
+
+yaw > +threshold
+→ D
+
+pitch < -threshold
+→ W
+
+pitch > +threshold
+→ S
+```
+
+Neutral:
+
+```text
+within dead zone
+→ no key
+```
+
+---
+
+# 11. Dead zones are essential
+
+People naturally move slightly even when trying to remain still.
+
+Without a dead zone:
+
+```text
+tiny head movement
+→ random character movement
+```
+
+That would make FIFA nearly impossible to control.
+
+Example conceptual thresholds:
+
+```text
+yaw between -5° and +5°
+→ neutral
+
+yaw > +5°
+→ D
+
+yaw < -5°
+→ A
+```
+
+Exact values should be tuned experimentally.
+
+---
+
+# 12. Diagonal movement
+
+We should support simultaneous keyboard input.
+
+Example:
+
+```text
+head up-right
+→ W + D
+
+head up-left
+→ W + A
+```
+
+This allows much more natural player movement.
+
+We should avoid limiting the system to only four cardinal directions.
+
+---
+
+# 13. Stabilization
+
+Face landmarks can jitter.
+
+So head pose should be smoothed before triggering keyboard commands.
+
+Conceptually:
+
+```text
+raw pose
+↓
+smoothing
+↓
+direction classifier
+↓
+keyboard
+```
+
+An exponential moving average or similar low-pass filtering should be sufficient initially.
+
+The priority is responsiveness without accidental input.
+
+---
+
+# 14. Mouth gesture
+
+EyeCraft already uses a mouth “O” gesture.
+
+We can preserve that concept.
+
+For FIFA4ALL:
+
+```text
+mouth O
+→ Space
+```
+
+Important:
+
+Do not continuously spam Space while the mouth remains open.
+
+Use an activation cycle:
+
+```text
+neutral
+↓
+mouth becomes O
+↓
+Space down
+↓
+Space up
+↓
+wait until mouth returns to neutral
+```
+
+Then the gesture can fire again.
+
+---
+
+# 15. Keyboard output abstraction
+
+The vision code should not directly depend on FIFA.
+
+Create a clean control interface.
+
+Conceptually:
+
+```text
+press("W")
+release("W")
+
+press("A")
+release("A")
+
+tap("SPACE")
+```
+
+The CV layer should only report intent.
+
+Example:
+
+```text
+move_up = true
+action_triggered = true
+```
+
+Then a separate output layer converts that into keyboard events.
+
+This keeps the architecture modular.
+
+---
+
+# 16. Recommended architecture
+
+```text
+               WEBCAM
+                  │
+                  ▼
+        FACE / HEAD TRACKING
+                  │
+                  ▼
+          FEATURE EXTRACTION
+                  │
+                  ▼
+           GESTURE ENGINE
+                  │
+         ┌────────┴─────────┐
+         ▼                  ▼
+   HEAD DIRECTION       MOUTH "O"
+         │                  │
+         ▼                  ▼
+      WASD                SPACE
+         │                  │
+         └────────┬─────────┘
+                  ▼
+          KEYBOARD OUTPUT
+                  │
+                  ▼
+            AMAZON LUNA
+                  │
+                  ▼
+          EA SPORTS FC
+```
+
+---
+
+# 17. The first technical milestone
+
+Before building anything polished:
+
+Open EA Sports FC through Luna.
+
+Then manually confirm:
+
+```text
+WASD
+Space
+L
+```
+
+behave exactly as expected.
+
+Record the actual behavior.
+
+Do not assume mappings.
+
+---
+
+# 18. Second technical milestone
+
+Create a tiny script that produces keyboard input programmatically.
+
+Example:
+
+```text
+script sends W
+↓
+player moves
+```
+
+Then:
+
+```text
+script sends Space
+↓
+FC action occurs
+```
+
+This proves Luna accepts synthetic keyboard events from macOS.
+
+This is a critical dependency.
+
+---
+
+# 19. Third technical milestone
+
+Connect EyeCraft-style head tracking.
+
+Prove:
+
+```text
+turn head right
+↓
+D key
+↓
+footballer moves right
+```
+
+Then test:
+
+```text
+left
+up
+down
+diagonals
+neutral
+```
+
+---
+
+# 20. Fourth technical milestone
+
+Add mouth O detection.
+
+Prove:
+
+```text
+mouth O
+↓
+Space
+↓
+football action
+```
+
+At this point, FIFA4ALL has an MVP.
+
+---
+
+# 21. Do not overbuild before this works
+
+Do not start with:
+
+* AI capability discovery
+* disability presets
+* onboarding animations
+* complicated UI
+* advanced calibration
+* intelligent gameplay agents
+* multiplayer adaptation
+* dynamic fatigue detection
+* voice control
+* eye tracking
+* research-heavy movement models
+
+until the basic loop works.
+
+The MVP question is:
+
+> **Can someone score a goal in EA Sports FC without touching the keyboard?**
+
+Everything else comes after.
+
+---
+
+# 22. Strongest MVP demo
+
+The simplest demo might actually be the strongest.
+
+Start EA FC.
+
+Show both hands away from the keyboard.
+
+Camera feed appears.
+
+Say:
+
+> “Normally this game expects a controller or keyboard.”
+
+Then:
+
+> “We're using the same interaction system that made Minecraft playable through facial movements, but applying it to soccer.”
+
+Turn head.
+
+Player moves.
+
+Mouth O.
+
+Action.
+
+Score.
+
+Then:
+
+# FIFA4ALL
+
+**Different bodies. Same pitch.**
+
+That alone could be a strong hackathon moment.
+
+---
+
+# 23. Training Camp remains the product direction
+
+Once the core MVP works, the broader vision becomes:
+
+# Soccer Training Camp
+
+Instead of manually defining universal gestures, the user goes through calibration drills.
+
+The system learns:
+
+* which movements exist
+* range of motion
+* stability
+* repeatability
+* intentionality
+* fatigue
+* independence from other motions
+
+Then it constructs a personalized input scheme.
+
+---
+
+# 24. Long-term thesis
+
+The real innovation is not:
+
+> head movement controls FIFA.
+
+That has limited novelty by itself.
+
+The deeper thesis is:
+
+> **FIFA4ALL discovers which movements a person can reliably make and builds a controller around those movements.**
+
+Traditional system:
+
+```text
+controls
+↓
+human adapts
+```
+
+FIFA4ALL:
+
+```text
+human capability
+↓
+controls adapt
+```
+
+---
+
+# 25. Research-informed presets
+
+We are interested in presets, but they should not be rigid diagnosis presets.
+
+Avoid:
+
+```text
+Cerebral palsy
+→ exact mapping X
+```
+
+because two people with cerebral palsy may have radically different movement abilities.
+
+Instead use research-informed starting profiles:
+
+```text
+Head + facial movement
+
+One-sided mobility
+
+Limited upper-body mobility
+
+Small range of motion
+
+Tremor / variable movement
+
+Custom
+```
+
+A profile chooses what to test first.
+
+Then calibration individualizes the final controls.
+
+---
+
+# 26. Training Camp concept
+
+Eventually:
+
+### Drill 1 — Show us your range
+
+User moves naturally.
+
+Camera tracks motion.
+
+---
+
+### Drill 2 — Hit targets
+
+User repeats candidate movements.
+
+System measures reliability.
+
+---
+
+### Drill 3 — Build controls
+
+System selects the strongest movement signals.
+
+Example:
+
+```text
+Head yaw
+98% reliable
+
+Left shoulder
+94%
+
+Torso lean
+91%
+```
+
+Then generates a mapping.
+
+---
+
+# 27. Final product vision
+
+Two users could have completely different control systems.
+
+User A:
+
+```text
+head
+→ movement
+
+mouth
+→ action
+```
+
+User B:
+
+```text
+torso lean
+→ movement
+
+shoulder raise
+→ action
+```
+
+Both play the same EA FC match.
+
+That is where:
+
+> **Different bodies. Same pitch.**
+
+becomes literal.
+
+---
+
+# 28. Why soccer is especially strong
+
+VTHacks is soccer-themed.
+
+Using actual EA FC reinforces the theme immediately.
+
+FIFA is also recognizable enough that the audience understands the normal control difficulty without explanation.
+
+It combines:
+
+* accessibility
+* gaming
+* soccer
+* computer vision
+* inclusive design
+* polished live interaction
+
+---
+
+# 29. Agent instructions
+
+Any agent working on FIFA4ALL should prioritize:
+
+### Priority 1
+
+Make keyboard input reliably control Luna.
+
+### Priority 2
+
+Make head tracking reliably generate WASD.
+
+### Priority 3
+
+Make mouth O reliably generate Space.
+
+### Priority 4
+
+Improve calibration and latency.
+
+### Priority 5
+
+Improve UI.
+
+### Priority 6
+
+Add adaptive control discovery.
+
+Do not reverse this order.
+
+---
+
+# 30. Suggested repo structure
+
+```text
+fifa4all/
+
+vision/
+    camera.py
+    face_landmarks.py
+    head_pose.py
+    expressions.py
+
+controls/
+    head_direction.py
+    mouth_action.py
+
+output/
+    keyboard.py
+
+ui/
+    overlay.py
+
+tests/
+    head_pose_tests.py
+    gesture_tests.py
+
+README.md
+SPEC.md
+DEMO.md
+STATUS.md
+EVALS.md
+```
+
+---
+
+# 31. SPEC.md
+
+Contains:
+
+* MVP
+* supported controls
+* non-goals
+* target latency
+* exact Luna / FC environment
+* future adaptive-control vision
+
+---
+
+# 32. DEMO.md
+
+Contains the exact judge flow.
+
+Every feature should be evaluated against:
+
+> **Does this make the live FIFA demo stronger?**
+
+---
+
+# 33. STATUS.md
+
+Agents should update:
+
+```text
+WORKING
+BROKEN
+CURRENT TASK
+NEXT TASK
+DO NOT TOUCH
+```
+
+Example:
+
+```text
+WORKING
+- webcam
+- face mesh
+- yaw detection
+
+BROKEN
+- synthetic keyboard events not reaching Luna
+
+NEXT
+- test alternate macOS keyboard injection
+
+DO NOT TOUCH
+- face landmark pipeline
+```
+
+---
+
+# 34. EVALS.md
+
+Track measurable behavior.
+
+Examples:
+
+```text
+head-left detection accuracy >95%
+
+neutral false activation <5%
+
+mouth O activation >95%
+
+movement-to-key latency <100ms
+
+no stuck keyboard states
+```
+
+Also test:
+
+```text
+W released when head returns neutral
+
+A + W can activate simultaneously
+
+mouth trigger fires only once per gesture
+```
+
+---
+
+# 35. Golden test recordings
+
+Record short webcam clips:
+
+```text
+neutral
+
+head left
+
+head right
+
+head up
+
+head down
+
+up-right
+
+mouth O
+
+normal talking
+
+random facial motion
+```
+
+Then agents can rerun CV changes against known test data.
+
+This makes automated development much safer.
+
+---
+
+# 36. Main technical risks
+
+## Risk 1
+
+Synthetic keyboard events may not reach Luna properly.
+
+Test this immediately.
+
+---
+
+## Risk 2
+
+Head movement may be uncomfortable if required angles are too large.
+
+Use low thresholds and calibration.
+
+---
+
+## Risk 3
+
+Head tracking may accidentally trigger movement.
+
+Use dead zones and smoothing.
+
+---
+
+## Risk 4
+
+Mouth O may fire while talking.
+
+Require confidence thresholds and neutral reset.
+
+---
+
+## Risk 5
+
+Latency may make gameplay frustrating.
+
+Keep vision processing local and lightweight.
+
+---
+
+# 37. Fallbacks
+
+If mouth detection fails:
+
+Use another EyeCraft expression.
+
+Examples:
+
+* wink
+* smile
+* eyebrow raise
+
+If keyboard injection fails:
+
+Explore:
+
+* browser automation
+* hardware HID bridge
+* virtual controller
+* Windows fallback machine
+
+If Luna fails entirely:
+
+Use a local custom soccer demo temporarily.
+
+But actual EA FC remains preferred.
+
+---
+
+# 38. What success looks like tonight
+
+A person sits in front of a MacBook.
+
+They open EA Sports FC on Amazon Luna.
+
+They never touch the keyboard.
+
+They:
+
+```text
+turn head
+→ footballer moves
+
+make mouth O
+→ football action happens
+```
+
+Then they score.
+
+That is the MVP.
+
+---
+
+# 39. What success looks like by judging
+
+The polished demo adds:
+
+* clean overlay
+* neutral-position calibration
+* Training Camp framing
+* accessible onboarding
+* reliable controls
+* possibly adaptive mapping
+* excellent visual design
+
+But the live FIFA interaction remains the center of everything.
+
+---
+
+# 40. North Star
+
+Do not optimize for number of features.
+
+Optimize for one unforgettable moment:
+
+> **Someone scores in actual EA Sports FC without touching the keyboard or controller.**
+
+Then explain:
+
+> **Today these are predefined gestures. Tomorrow FIFA4ALL learns whatever movements each person can reliably make and builds the controls around them.**
+
+That is the bridge from hackathon MVP to the larger accessibility vision.
+
+# FIFA4ALL
+
+## Different bodies. Same pitch.
+
+This version should replace the previous onboarding doc as the current source of truth.
