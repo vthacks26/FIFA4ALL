@@ -1,8 +1,9 @@
 """Look-axis overlay drawn on the game screen.
 
-The React UI on the second monitor is for the audience. This is for the player:
-a small always-on-top window showing the nose-ball and which keys are firing,
-so they never have to look away from the match.
+The orientation website (browser, http://127.0.0.1:8765/) is a separate UI:
+onboarding, practice, and live telemetry. This native window is camera/vision
+only — the mirrored MacBook frame, face landmarks, WASD look-axis, and RESET.
+Do not draw website chrome (Welcome, training copy, brand shell) here.
 
 Window behaviour comes from `tracking.overlay`, which makes the OpenCV window a
 non-activating panel that floats above a fullscreen Luna without taking focus.
@@ -10,7 +11,7 @@ Stealing focus would stop the keys reaching the game, which is the failure this
 whole overlay exists to make visible.
 
 The geometry is drawn from the same control state the bridge publishes, so the
-overlay, the second monitor, and the keys actually sent can never disagree.
+overlay, the website, and the keys actually sent can never disagree.
 """
 
 from __future__ import annotations
@@ -69,7 +70,33 @@ def draw_overlay(cv2: Any, frame: Any, state: Mapping[str, object], thresholds: 
         cv2.circle(view, nose, 9, (20, 20, 20), 2)
 
     _draw_status(cv2, view, state, width, height)
+    _draw_reset(cv2, view, width)
     return view
+
+
+def reset_button_rect(width: int, height: int) -> tuple[int, int, int, int]:
+    box_w = min(200, max(120, width // 3))
+    box_h = min(56, max(40, height // 7))
+    margin = 10
+    x2 = max(margin + box_w, width - margin)
+    return (x2 - box_w, margin, x2, margin + box_h)
+
+
+def _draw_reset(cv2: Any, view: Any, width: int) -> None:
+    height = view.shape[0]
+    x1, y1, x2, y2 = reset_button_rect(width, height)
+    cv2.rectangle(view, (x1, y1), (x2, y2), (36, 96, 230), -1)
+    cv2.rectangle(view, (x1, y1), (x2, y2), WHITE, 2)
+    cv2.putText(
+        view,
+        "RESET",
+        (x1 + 18, y1 + (y2 - y1) // 2 + 6),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        WHITE,
+        2,
+        cv2.LINE_AA,
+    )
 
 
 def _draw_status(cv2: Any, view: Any, state: Mapping[str, object], width: int, height: int) -> None:

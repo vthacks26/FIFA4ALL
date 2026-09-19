@@ -18,6 +18,10 @@ BASE_POINTS = {
     "left_lower_eyelid": (0.38, 0.370),
     "right_upper_eyelid": (0.62, 0.330),
     "right_lower_eyelid": (0.62, 0.370),
+    "left_inner_brow": (0.40, 0.280),
+    "left_outer_brow": (0.32, 0.285),
+    "right_inner_brow": (0.60, 0.280),
+    "right_outer_brow": (0.68, 0.285),
 }
 
 # A neutral face carrying the optional landmarks too. Cheeks are 0.50 apart,
@@ -85,6 +89,40 @@ class FaceFeatureExtractorTests(unittest.TestCase):
         self.assertAlmostEqual(frame.features["head_turn"].value, 0.0)
         self.assertAlmostEqual(frame.features["head_tilt"].value, 0.0)
         self.assertAlmostEqual(frame.features["left_wink"].value, 0.0)
+        self.assertAlmostEqual(frame.features["eyebrow_raise"].value, 0.095)
+
+    def test_open_mouth_does_not_change_eyebrow_raise(self):
+        """Shoot (mouth open) must not look like an eyebrow-raise reset."""
+
+        extractor = FaceFeatureExtractor(FeatureConfig(smoothing_alpha=1.0))
+        rest = extractor.from_named_points(BASE_POINTS)
+        points = dict(BASE_POINTS)
+        points["lower_lip"] = (0.50, 0.68)
+        points["upper_lip"] = (0.50, 0.52)
+
+        frame = extractor.from_named_points(points)
+
+        self.assertGreater(frame.features["mouth_opening"].value, 0.15)
+        self.assertAlmostEqual(
+            frame.features["eyebrow_raise"].value,
+            rest.features["eyebrow_raise"].value,
+        )
+
+    def test_raised_brows_increase_eyebrow_raise(self):
+        extractor = FaceFeatureExtractor(FeatureConfig(smoothing_alpha=1.0))
+        rest = extractor.from_named_points(BASE_POINTS)
+        points = dict(BASE_POINTS)
+        points["left_inner_brow"] = (0.40, 0.250)
+        points["left_outer_brow"] = (0.32, 0.255)
+        points["right_inner_brow"] = (0.60, 0.250)
+        points["right_outer_brow"] = (0.68, 0.255)
+
+        frame = extractor.from_named_points(points)
+
+        self.assertGreater(
+            frame.features["eyebrow_raise"].value - rest.features["eyebrow_raise"].value,
+            0.030,
+        )
 
     def test_head_turn_sign_uses_camera_image_direction(self):
         extractor = FaceFeatureExtractor(FeatureConfig(smoothing_alpha=1.0))

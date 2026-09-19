@@ -20,9 +20,10 @@ class DefaultBindingTests(unittest.TestCase):
     def test_default_map_reproduces_shipped_mapping(self) -> None:
         self.assertEqual(default_bindings().as_dict(), {"SHOOT": "mouth_open", "PASS": "wink"})
 
-    def test_shoot_holds_its_key_and_pass_taps(self) -> None:
+    def test_both_shipped_actions_hold_their_key(self) -> None:
+        """Pass became a hold upstream; the contract follows the game."""
         self.assertEqual(ACTIONS["SHOOT"].trigger, "hold")
-        self.assertEqual(ACTIONS["PASS"].trigger, "tap")
+        self.assertEqual(ACTIONS["PASS"].trigger, "hold")
 
     def test_default_channels_match_shipped_thresholds(self) -> None:
         self.assertEqual(CHANNELS["mouth_open"].default_on, 0.090)
@@ -126,7 +127,11 @@ class ChannelVocabularyTests(unittest.TestCase):
 
         self.assertEqual(channel.gate, "head_level")
         self.assertIn("head_pitch", channel.required_features)
-        self.assertTrue(channel.selectable)
+
+    def test_brow_raise_is_not_offered_because_reset_already_owns_it(self) -> None:
+        """Raising the eyebrows recentres neutral, so it cannot also act."""
+
+        self.assertFalse(CHANNELS["brow_raise"].selectable)
 
     def test_smile_width_is_gated_on_the_mouth_staying_near_rest(self) -> None:
         channel = CHANNELS["smile_width"]
@@ -183,7 +188,7 @@ class SelectableChannelTests(unittest.TestCase):
 
         self.assertEqual(
             names,
-            ["mouth_open", "wink", "brow_raise", "smile_width", "jaw_lateral"],
+            ["mouth_open", "wink", "smile_width", "jaw_lateral"],
         )
 
 

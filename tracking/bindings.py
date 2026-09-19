@@ -35,7 +35,11 @@ class Action:
 
 ACTIONS: Mapping[ActionName, Action] = {
     "SHOOT": Action(name="SHOOT", key="Space", trigger="hold", label="Shoot"),
-    "PASS": Action(name="PASS", key="L", trigger="tap", label="Pass"),
+    # Pass is a hold, not a tap: the wink holds L until the eye opens again.
+    # Changed upstream in "Replace tongue-out reset with eyebrow raise"; the
+    # `tap` trigger stays in the contract because it is still a legitimate
+    # shape for an action, just not one any action uses today.
+    "PASS": Action(name="PASS", key="L", trigger="hold", label="Pass"),
 }
 
 
@@ -154,6 +158,13 @@ CHANNELS: Mapping[str, GestureChannel] = {
         # gesture more visible, not less, so it is not gated: a blink cannot
         # fake a brow raise because eyelids do not move the brow ridge.
         gate="head_level",
+        # Held back from selection, not because the measurement is weak but
+        # because the gesture is already taken: raising the eyebrows is the
+        # pose-reset gesture on main. Binding it to an action as well would
+        # recentre the player's neutral position every time they used it.
+        # Still measured, so Phase 4 scoring can see it and so the channel is
+        # ready if reset moves to another gesture. That is a product call.
+        selectable=False,
     ),
     "smile_width": GestureChannel(
         name="smile_width",

@@ -2,91 +2,100 @@
 
 Play EA Sports FC on Amazon Luna with your face instead of a controller. Look with your head for WASD, open your mouth to shoot (Space hold), wink to pass (L hold).
 
-This is a VTHacks accessibility hack. The live path in this branch injects macOS Quartz HID key holds into the focused app (Google Chrome running Luna).
+This is a VTHacks accessibility hack. The live product on `main` injects macOS Quartz HID key holds into the focused app (Google Chrome running Luna).
 
-## Requirements
+## Run from scratch (macOS)
 
-- macOS (Quartz `CGEventPost` key injection only works here)
-- Built-in **MacBook Pro Camera** (FaceTime / built-in Mac camera). Live capture **never** opens iPhone or Continuity Camera indexes.
-- Google Chrome with Amazon Luna, EA Sports FC in the simplified keyboard layout
-- Python 3.12 (MediaPipe `0.10.14` is pinned for 3.12; 3.14 is not a reliable runtime for this stack)
-- Camera **and** Accessibility permission for Terminal / Python (see [Permissions](#permissions))
+You need **macOS**, **Python 3.12**, a **MacBook camera**, and **Google Chrome** with Amazon Luna. Quartz key injection does not work on other OSes. Live capture opens only a built-in Mac camera (`MacBook Pro Camera` / FaceTime / built-in) and never an iPhone or Continuity Camera index.
 
-## Install
+Do not use the system `python` binary (it is often missing on macOS) and do not use Python 3.9 (MediaPipe / OpenCV will fail there — the usual error is `cv2` missing). Create a **3.12** venv so `python` and `pip` exist.
 
-From a clone of [vthacks26/FIFA4ALL](https://github.com/vthacks26/FIFA4ALL):
-
-```bash
-git checkout feature/onboarding
-
-python3.12 -m venv .venv-mediapipe
-source .venv-mediapipe/bin/activate
-python -m pip install -r tracking/requirements.txt
-```
-
-`tracking/requirements.txt` is the webcam runtime: `mediapipe==0.10.14`, `opencv-python`, and `numpy`. On Apple Silicon you can create the venv with Homebrew Python 3.12 instead:
+If `python3.12` is not on your PATH:
 
 ```bash
 brew install python@3.12
-/opt/homebrew/bin/python3.12 -m venv .venv-mediapipe
 ```
 
-Always run the live module from the **repository root** so `python -m tracking.live` resolves. `MPLCONFIGDIR=.cache/matplotlib` keeps MediaPipe’s Matplotlib config out of your home directory (that path is gitignored).
+### 1. Clone `main`
 
-## Run
+```bash
+git clone https://github.com/vthacks26/FIFA4ALL.git
+cd FIFA4ALL
+git checkout main
+git pull
+```
 
-Preview overlay (face, look-axis, live keys, Reset):
+If you already have a clone, skip `git clone` and still run `git checkout main` then `git pull` so you are on the live product.
+
+### 2. Python 3.12 venv
+
+From the repository root:
+
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -r tracking/requirements.txt
+```
+
+`tracking/requirements.txt` installs `mediapipe==0.10.14`, `protobuf>=4.25.3,<5`, `opencv-python`, and `numpy`. Always run the live module from this root so `python -m tracking.live` resolves. `MPLCONFIGDIR=.cache/matplotlib` keeps MediaPipe’s Matplotlib config out of your home directory (that path is gitignored).
+
+### 3. Camera and Accessibility
+
+In **System Settings → Privacy & Security**, grant both to **Terminal** (or iTerm / the app that will run Python — not only Chrome):
+
+- **Camera** — first run may prompt. Without this, the MacBook camera will not open.
+- **Accessibility** — without this, Quartz HID holds may be dropped (`Accessibility is NOT granted; Quartz keys may be dropped.`).
+
+### 4. Start
+
+With the venv still active, from the repository root:
 
 ```bash
 MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --preview
 ```
 
-Headless inject (same mapping, no overlay window):
+`--preview` waits until the orientation UI is listening, then opens **http://127.0.0.1:8765/** (Welcome / onboarding) with macOS `/usr/bin/open`. The look-axis overlay is a **separate** camera window (`FIFA4ALL look axis`): mirrored MacBook frame, face landmarks, WASD axis, current keys, orange **RESET**. Website chrome stays in the browser; it is not drawn on the camera overlay. You do not need `npm run dev`.
+
+To inject without opening a browser (keeps Luna focused):
 
 ```bash
 MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --no-preview
 ```
 
-`--no-preview` wins if both flags are passed. Quit with **Ctrl+C**. Lost face tracking releases every held key.
+`--no-preview` still serves http://127.0.0.1:8765/ and still sends keys; it does not raise a window. `--no-preview` wins if both flags are passed. Quit with **Ctrl+C**. Lost face tracking releases every held key.
 
-Do not start this from another directory, and do not point OpenCV at Continuity Camera. The process enumerates AVFoundation devices by name and opens only a built-in Mac camera (`MacBook Pro Camera` / FaceTime / built-in). If index `0` is an iPhone, that index is skipped.
+### After you close Terminal
+
+The venv deactivates when the shell exits. From the clone:
+
+```bash
+cd FIFA4ALL
+source .venv/bin/activate
+MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --preview
+```
+
+You do not need to recreate `.venv` or reinstall unless you deleted it.
 
 ## Play on Luna
 
-1. Grant Camera and Accessibility (below), then start `--preview` or `--no-preview`.
-2. Open **Google Chrome** → Amazon Luna → EA Sports FC.
-3. **Click the game** so Chrome / Luna is focused. OS keys go to the frontmost app; if Chrome is not frontmost, the injector warns and keys will land somewhere else.
-4. Sit straight in frame. Tap the orange **RESET** on the `FIFA4ALL look axis` overlay (preview mode) so the next valid face pose is neutral.
+1. Grant Camera and Accessibility, then start `--preview` (orientation) or `--no-preview` (match, Luna already focused).
+2. Open **Google Chrome** → Amazon Luna → EA Sports FC (simplified keyboard layout).
+3. **Click the game** so Chrome / Luna is focused. OS keys go to the frontmost app.
+4. Sit straight. Recentre by **raising your eyebrows**, from the site (**Find your center**, **Reset center**), or by tapping **RESET** on the look-axis overlay. Eyebrow raise, site calibrate, and overlay RESET all call the same `ControlStateMachine.calibrate` on this process — they apply to play. A held raise does not repeat the reset; opening your mouth to shoot does not reset. Keep the process running when you switch from the site to the match.
 5. Look, open your mouth, or wink. Holds stay down until you return to center / close your mouth / stop winking.
-
-### Mappings
 
 | Gesture | Key (held) | In-game (simplified FC) |
 | --- | --- | --- |
 | Nose / head look axis (leave the center deadzone) | `W` `A` `S` `D` | Move |
 | Mouth open | `Space` | Shoot (hold while the mouth stays open) |
-| Left wink | `L` | Pass (hold while the wink is detected) |
+| Wink (either eye; blinks rejected) | `L` | Pass (hold while the wink is detected) |
+| Raised eyebrows | — | Recentre / recalibrate pose (same as overlay RESET and `POST /calibrate`) |
 
 The first valid nose point after start or Reset is the joystick center. Returning to that center releases WASD. Combinations are allowed (for example look + shoot).
 
-### Overlay
-
-`--preview` opens a floating, non-activating window titled **`FIFA4ALL look axis`**. It shows the MacBook camera frame, face landmarks, the WASD look-axis, current keys, and an orange **RESET** control (plus a real AppKit Reset button on the window). Sit straight, then tap **RESET** to clear the pose baseline and recapture neutral.
-
-The overlay is meant to stay above Luna without stealing key focus. **Exclusive fullscreen still covers it.** Press **Esc** to leave exclusive fullscreen if you need to see Reset or the look-axis HUD.
-
-## Permissions
-
-In **System Settings → Privacy & Security**:
-
-- **Camera** — allow Terminal (or iTerm / your Python host) so the MacBook camera can open. The first run may prompt.
-- **Accessibility** — allow the same Terminal / Python process. Without it, Quartz HID holds may be dropped (`Accessibility is NOT granted; Quartz keys may be dropped.`).
-
-Grant these to the process that actually runs `python -m tracking.live`, not only to Chrome.
+**Exclusive fullscreen covers the overlay.** Press **Esc** if you need to see the look-axis HUD.
 
 ## Tests (no camera)
-
-Mapping, camera-name selection, and Reset geometry tests do not open the webcam:
 
 ```bash
 python -m unittest discover -s tests
@@ -94,65 +103,11 @@ python -m unittest discover -s tests
 
 The overlay annotate test imports OpenCV, so install `tracking/requirements.txt` first if that case errors on `cv2`.
 
-## Related commands in this repo
-
-These exist but are **not** the Luna injector:
-
-| Command | What it does |
-| --- | --- |
-| `MPLCONFIGDIR=.cache/matplotlib python -m tracking.control_preview` | Same suggested labels; **does not** send keys. Press `q` to quit, `r` to reset the nose center. |
-| `MPLCONFIGDIR=.cache/matplotlib python -m tracking.diagnostic` | Webcam feature overlay. Press `q` to quit. |
-| `python -m tracking.haar_control_preview` | Lighter OpenCV nose fallback (WASD preview only; no mouth/wink, no Quartz inject). |
-
-More tracking notes: [`tracking/README.md`](tracking/README.md).
-
-## Two ways to run
-
-Both paths share one tracking pipeline, one set of thresholds, and one
-keyboard output layer. Pick by who is watching.
-
-### Player overlay only
-
-A small look-axis window floats above fullscreen Luna without taking focus.
-Nothing else on screen.
-
-```bash
-MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --preview
-```
-
-### Onboarding and second-monitor telemetry
-
-Teaches the controls, calibrates, then becomes a match HUD for the audience.
-Add `--overlay` to also float the player-facing window over the game, from the
-same camera and the same process.
-
-```bash
-MPLCONFIGDIR=.cache/matplotlib python -m bridge.server --overlay
-cd onboarding && npm install && npm run dev      # second monitor
-```
-
-See `onboarding/README.md` for the flow, the wire contract, and match mode.
-
-## Permissions
-
-Keyboard output needs macOS Accessibility permission. Without it macOS discards
-injected events silently, which is the usual reason keys never reach Luna.
-Check before a demo:
-
-```bash
-python3 -m output.selftest
-```
-
-It needs no virtualenv and no third-party packages. `PASS` means synthetic keys
-reach the same input stack Luna reads from.
+More tracking notes: [`tracking/README.md`](tracking/README.md). Orientation screens: [`onboarding/README.md`](onboarding/README.md).
 
 ## Gesture notes
 
-- **Shooting** holds Space while the mouth is open, so a longer open is a more
-  powerful shot. Calibration samples the resting mouth, because a mouth at rest
-  does not read zero and a fixed threshold can latch Space open permanently.
-- **Passing** accepts either eye. A blink is rejected by requiring the other eye
-  to stay open: eyelids do not close in sync, so mid-blink the left/right
-  difference briefly doubles the wink threshold.
-- **Movement** releases every key when tracking is lost, so a lost face cannot
-  leave the player running.
+- **Shooting** holds Space while the mouth is open, so a longer open is a more powerful shot. Calibration samples the resting mouth, because a mouth at rest does not read zero and a fixed threshold can latch Space open permanently.
+- **Passing** accepts either eye. A blink is rejected by requiring the other eye to stay open.
+- **Recentre** by raising your eyebrows (or overlay **RESET** / website **Find your center**). Detection is the brow-to-eyelid gap above the resting value sampled on the first valid face and again on click-calibrate, so a normal open mouth used for shoot does not reset. The trigger is edge-latched: a held raise fires once until you lower your brows.
+- **Movement** releases every key when tracking is lost, so a lost face cannot leave the player running.

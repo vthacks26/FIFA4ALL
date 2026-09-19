@@ -28,6 +28,8 @@ export interface ControlState {
   readonly keys: readonly MovementKey[];
   readonly mouth: ExpressionState;
   readonly wink: ExpressionState;
+  /** Raised-eyebrow recentres pose. Absent in older payloads. */
+  readonly eyebrow?: ExpressionState;
   readonly tracking: boolean;
   /** True only on the frame neutral was re-established after posture drift. */
   readonly recentred?: boolean;
@@ -54,6 +56,8 @@ export interface Thresholds {
   readonly mouth_reset: number;
   readonly wink_on: number;
   readonly wink_off: number;
+  readonly brow_on?: number;
+  readonly brow_off?: number;
   /** A wink only counts while the other eye stays this open, so blinks are
    *  rejected: eyelids close out of sync and briefly look like a wink. */
   readonly eye_open_fraction: number;
@@ -114,6 +118,8 @@ export const DEFAULT_THRESHOLDS: Thresholds = {
   mouth_reset: 0.06,
   wink_on: 0.025,
   wink_off: 0.015,
+  brow_on: 0.030,
+  brow_off: 0.012,
   eye_open_fraction: 0.65,
   eye_open_floor: 0.07,
   dwell_seconds: 1.0,

@@ -63,6 +63,7 @@ FEATURE_UNITS: Mapping[str, str] = {
     "mouth_pucker": "ratio",
     "jaw_lateral": "normalized_x_offset",
     "cheek_span_ratio": "ratio",
+    "eyebrow_raise": "ratio",
 }
 
 FEATURE_DOCUMENTATION = {
@@ -158,5 +159,11 @@ FEATURE_DOCUMENTATION = {
         "out-of-plane bulge, so it moves this number by only a percent or "
         "two, comparable to the shift head yaw produces. Treat it as a weak "
         "diagnostic, not a trigger."
+    ),
+    "eyebrow_raise": (
+        "Average vertical gap from the inner/outer brows to the upper eyelids, "
+        "divided by face width. Larger values mean the brows sit higher. An "
+        "open mouth does not move these landmarks, so shoot cannot look like a "
+        "reset. Sensitive to glasses, bangs, and extreme head pitch."
     ),
 }

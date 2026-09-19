@@ -25,6 +25,7 @@ Once `shared.MovementFrame` is published, adapt the boundary in one place instea
 | `mouth_width`      | `ratio`               | Mouth-corner separation divided by face width. Larger means a wider smile.                                                                                | Head yaw makes it read narrower than it is, which loses smiles but cannot invent one. A jaw drop narrows it slightly.                                 |
 | `mouth_pucker`     | `ratio`               | Lip gap divided by mouth-corner separation: the aperture's aspect ratio. Larger means a rounder "O".                                                      | Cannot separate a pucker from a small jaw drop; both raise it, from opposite ends of the fraction. Lip protrusion is out-of-plane and invisible here. |
 | `jaw_lateral`      | `normalized_x_offset` | Chin offset from the nose tip projected onto the eye line, divided by face width. Positive means the chin slid toward the user's right in the image.      | Head roll cancels by construction; head yaw does not, and leaves a residual offset in the direction of the turn.                                      |
+| `eyebrow_raise`    | `ratio`               | Average vertical gap from the inner/outer brows to the upper eyelids, divided by face width. Larger values mean the brows sit higher. | An open mouth does not move these landmarks. Sensitive to glasses, bangs, and extreme head pitch. |
 | `cheek_span_ratio` | `ratio`               | Cheek-to-cheek distance divided by inter-eye distance.                                                                                                    | A cheek puff moves it by only a percent or two, about what head yaw moves it. Weak diagnostic, not a trigger.                                         |
 
 The three optional landmark groups behind `brow_raise`, the mouth-corner
@@ -62,13 +63,21 @@ The diagnostic opens a webcam preview, overlays live feature values, shows track
 
 For Quartz OS key holds into the frontmost app (Google Chrome / Luna), MacBook camera only.
 
-Face + WASD look-axis overlay (non-activating, not click-through). Sit straight and tap the **Reset** button on the look-axis window to recapture the neutral nose axis:
+`--preview` waits until the UI is listening, then opens
+http://127.0.0.1:8765/ (Welcome / practice / live HUD) with macOS
+`/usr/bin/open` and a **separate** Face + WASD look-axis overlay
+(camera/vision only; non-activating). If the browser does not appear, the
+log prints that URL to click. Recentre from the website
+(**Find your center** / **Reset center**), the overlay **Reset**, or by
+**raising your eyebrows** — all three drive the same
+`ControlStateMachine.calibrate` on the live injector. A held raise does
+not fire repeatedly; opening your mouth to shoot does not reset.
 
 ```bash
 MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --preview
 ```
 
-Headless inject (no overlay):
+Headless inject (same UI server, no overlay, no browser — keeps Luna focused):
 
 ```bash
 MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --no-preview

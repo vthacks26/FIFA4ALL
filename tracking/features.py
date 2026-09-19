@@ -56,6 +56,10 @@ class FaceFeatureExtractor:
         "left_lower_eyelid",
         "right_upper_eyelid",
         "right_lower_eyelid",
+        "left_inner_brow",
+        "left_outer_brow",
+        "right_inner_brow",
+        "right_outer_brow",
     }
 
     # Landmarks that unlock extra gesture channels, kept optional so trackers
@@ -143,6 +147,7 @@ class FaceFeatureExtractor:
         right_eye = points["right_eye"]
 
         mouth_opening = _distance(points["upper_lip"], points["lower_lip"]) / face_width
+        eyebrow_raise = _eyebrow_raise(points, face_width)
 
         cheek_mid_x = (points["left_cheek"][0] + points["right_cheek"][0]) / 2.0
         head_turn = (nose[0] - cheek_mid_x) / face_width
@@ -172,6 +177,7 @@ class FaceFeatureExtractor:
             "left_wink": left_wink,
             "left_eye_opening": left_eye_opening,
             "right_eye_opening": right_eye_opening,
+            "eyebrow_raise": eyebrow_raise,
         }
 
         eye_span = _distance(left_eye, right_eye)
@@ -238,6 +244,19 @@ _OPTIONAL_LANDMARKS: frozenset[str] = frozenset(
     for landmarks in FaceFeatureExtractor.OPTIONAL_FEATURE_LANDMARKS.values()
     for landmark in landmarks
 )
+def _eyebrow_raise(points: Mapping[str, Point], face_width: float) -> float:
+    """Brow-to-eyelid gap divided by face width. Larger means brows are higher.
+
+    Image y grows downward, so a raised brow (smaller y) increases the gap to
+    the upper eyelid. An open mouth only moves the lips, so this stays put and
+    cannot be confused with shoot.
+    """
+
+    left_brow_y = (points["left_inner_brow"][1] + points["left_outer_brow"][1]) / 2.0
+    right_brow_y = (points["right_inner_brow"][1] + points["right_outer_brow"][1]) / 2.0
+    left_gap = points["left_upper_eyelid"][1] - left_brow_y
+    right_gap = points["right_upper_eyelid"][1] - right_brow_y
+    return (left_gap + right_gap) / 2.0 / face_width
 
 
 def _distance(a: Sequence[float], b: Sequence[float]) -> float:

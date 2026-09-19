@@ -6,7 +6,7 @@ Semantics, decided from how EA Sports FC actually reads input:
   and release the moment the nose returns to centre.
 - Shooting is analogue. Its gesture holds Space, so a longer hold is a more
   powerful shot, matching how FC charges a strike.
-- Passing is discrete. Its gesture taps L once; holding it never repeats.
+- Passing is a hold. Its gesture holds L until the gesture ends.
 
 Which gesture drives which action is not decided here. This module reads the
 action table in `tracking.bindings` for the key and the hold-vs-tap rule, and
@@ -33,12 +33,14 @@ MOVEMENT_KEYS = ("W", "A", "S", "D")
 # Kept so existing callers and tests keep importing a name rather than reaching
 # into the action table. They are now derived, not authoritative: the action
 # table decides the key.
+# How long a tap holds its key down. Long enough for the game to register a
+# discrete press, short enough that it never reads as a hold. No action uses
+# the tap trigger today -- pass became a hold upstream -- but the trigger is
+# still part of the action contract, so the timing lives here with it.
+TAP_SECONDS = 0.06
+
 SHOOT_KEY = ACTIONS["SHOOT"].key
 PASS_KEY = ACTIONS["PASS"].key
-
-# How long a tapped key stays down. Long enough for a browser to register it,
-# short enough to feel instant at 30fps.
-TAP_SECONDS = 0.08
 
 
 @dataclass
@@ -56,6 +58,8 @@ class InputSession:
     armed: bool = False
     _held: set[str] = field(default_factory=set)
     _tap_release_at: dict[str, float] = field(default_factory=dict)
+    # When each hold action's current hold began, keyed by action name.
+    _hold_started: dict[str, float] = field(default_factory=dict)
     # Charge timer for the held action. SHOOT is the only action with a hold
     # trigger, so one timer is enough; a second hold action would need its own.
     _last_shot_started: float | None = None
@@ -74,7 +78,6 @@ class InputSession:
         for key in sorted(self._held):
             self.keyboard.key_up(key)
         self._held.clear()
-        self._tap_release_at.clear()
         self._last_shot_started = None
         self.shot_seconds = 0.0
 
@@ -86,7 +89,6 @@ class InputSession:
         """Apply one control state frame."""
 
         moment = monotonic() if now is None else now
-        self._expire_taps(moment)
 
         if not self.armed or not state.get("tracking", False):
             self.release_all()
@@ -154,13 +156,20 @@ class InputSession:
 
         if bool(view.get("active")):
             if action.key not in self._held:
-                self._last_shot_started = now
+                self._hold_started[action.name] = now
             self._press(action.key)
-            self.shot_seconds = now - (self._last_shot_started or now)
+            held = now - self._hold_started.get(action.name, now)
         else:
             self._release(action.key)
-            self._last_shot_started = None
-            self.shot_seconds = 0.0
+            self._hold_started.pop(action.name, None)
+            held = 0.0
+        if action.name == "SHOOT":
+            # Shot power is charge duration, and it belongs to SHOOT alone.
+            # Every hold action keeps its own start time: pass is also a hold
+            # since it moved off the tap trigger, and sharing one timer let it
+            # zero the shot charge on the same frame the shot was building.
+            self._last_shot_started = self._hold_started.get(action.name)
+            self.shot_seconds = held
 
     def _apply_tap(self, action: Action, view: Mapping[str, object], now: float) -> None:
         """Tap the key once per rising edge. `fired` is edged upstream.
@@ -185,7 +194,6 @@ class InputSession:
         self._held.add(key)
 
     def _release(self, key: str) -> None:
-        self._tap_release_at.pop(key, None)
         if key not in self._held:
             return
         self.keyboard.key_up(key)
