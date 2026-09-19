@@ -4,9 +4,14 @@ Semantics, decided from how EA Sports FC actually reads input:
 
 - Movement (W/A/S/D) is continuous. Keys stay down while a direction is active
   and release the moment the nose returns to centre.
-- Shooting is analogue. Mouth-open holds Space, so a longer open is a more
+- Shooting is analogue. Its gesture holds Space, so a longer hold is a more
   powerful shot, matching how FC charges a strike.
-- Passing is discrete. One wink taps L once; an eye held closed never repeats.
+- Passing is discrete. Its gesture taps L once; holding it never repeats.
+
+Which gesture drives which action is not decided here. This module reads the
+action table in `tracking.bindings` for the key and the hold-vs-tap rule, and
+the active `BindingMap` for the channel to watch, so rebinding an action during
+orientation needs no change to the output layer.
 
 Safety is the priority over expressiveness: losing tracking, disarming, or
 exiting always releases every held key, so a lost face can never leave the
@@ -20,10 +25,16 @@ from time import monotonic
 from typing import Mapping
 
 from output.keyboard import KeyboardBackend
+from tracking.bindings import ACTIONS, Action, BindingMap, default_bindings
+from tracking.controls import LEGACY_CHANNEL_KEYS
 
 MOVEMENT_KEYS = ("W", "A", "S", "D")
-SHOOT_KEY = "Space"
-PASS_KEY = "L"
+
+# Kept so existing callers and tests keep importing a name rather than reaching
+# into the action table. They are now derived, not authoritative: the action
+# table decides the key.
+SHOOT_KEY = ACTIONS["SHOOT"].key
+PASS_KEY = ACTIONS["PASS"].key
 
 # How long a tapped key stays down. Long enough for a browser to register it,
 # short enough to feel instant at 30fps.
@@ -39,9 +50,14 @@ class InputSession:
     """
 
     keyboard: KeyboardBackend
+    # The map this session resolves actions against. Defaults to the shipped
+    # mapping; Phase 5 loads a saved profile into it instead.
+    bindings: BindingMap = field(default_factory=default_bindings)
     armed: bool = False
     _held: set[str] = field(default_factory=set)
     _tap_release_at: dict[str, float] = field(default_factory=dict)
+    # Charge timer for the held action. SHOOT is the only action with a hold
+    # trigger, so one timer is enough; a second hold action would need its own.
     _last_shot_started: float | None = None
     shot_seconds: float = 0.0
 
@@ -77,8 +93,7 @@ class InputSession:
             return
 
         self._apply_movement(state)
-        self._apply_shoot(state, moment)
-        self._apply_pass(state, moment)
+        self._apply_actions(state, moment)
 
     def _apply_movement(self, state: Mapping[str, object]) -> None:
         raw = state.get("keys")
@@ -89,29 +104,74 @@ class InputSession:
             else:
                 self._release(key)
 
-    def _apply_shoot(self, state: Mapping[str, object], now: float) -> None:
-        """Mouth-open holds Space so shot power tracks how long it stays open."""
+    def _apply_actions(self, state: Mapping[str, object], now: float) -> None:
+        """Drive every action from whichever channel currently holds it.
 
-        mouth = state.get("mouth")
-        active = bool(mouth.get("active")) if isinstance(mouth, dict) else False
-        if active:
-            if SHOOT_KEY not in self._held:
+        Iterating the action table rather than calling one method per action is
+        what makes a rebind a data change. `ACTIONS` is ordered, so the key
+        events for one frame come out in the same order every time.
+        """
+
+        for name, action in ACTIONS.items():
+            channel = self.bindings.channel_for(name)
+            if channel is None:
+                # Rebinding displaces whatever held the channel, so an action
+                # can legitimately be unbound mid-session. Release its key
+                # rather than leaving it stuck down from the previous binding.
+                self._release(action.key)
+                continue
+            view = self._channel_view(state, channel.name)
+            if action.trigger == "hold":
+                self._apply_hold(action, view, now)
+            elif action.trigger == "tap":
+                self._apply_tap(action, view, now)
+            else:
+                raise ValueError(f"{action.name}: unknown trigger {action.trigger!r}")
+
+    @staticmethod
+    def _channel_view(state: Mapping[str, object], channel_name: str) -> Mapping[str, object]:
+        """Read one channel's gesture view out of a control state frame.
+
+        Prefers the generic `channels` view. Falls back to the legacy top-level
+        key for callers still emitting the pre-Phase-1 shape; both carry the
+        same values, so the fallback changes nothing but tolerance.
+        """
+
+        channels = state.get("channels")
+        if isinstance(channels, dict):
+            view = channels.get(channel_name)
+            if isinstance(view, dict):
+                return view
+        legacy = state.get(LEGACY_CHANNEL_KEYS.get(channel_name, channel_name))
+        return legacy if isinstance(legacy, dict) else {}
+
+    def _apply_hold(self, action: Action, view: Mapping[str, object], now: float) -> None:
+        """Hold the key for as long as the gesture is active.
+
+        Shot power in FC is charge duration, so the key must stay down for the
+        whole gesture rather than being tapped on its rising edge.
+        """
+
+        if bool(view.get("active")):
+            if action.key not in self._held:
                 self._last_shot_started = now
-            self._press(SHOOT_KEY)
+            self._press(action.key)
             self.shot_seconds = now - (self._last_shot_started or now)
         else:
-            self._release(SHOOT_KEY)
+            self._release(action.key)
             self._last_shot_started = None
             self.shot_seconds = 0.0
 
-    def _apply_pass(self, state: Mapping[str, object], now: float) -> None:
-        """A wink taps L. `fired` is already a rising edge upstream."""
+    def _apply_tap(self, action: Action, view: Mapping[str, object], now: float) -> None:
+        """Tap the key once per rising edge. `fired` is edged upstream.
 
-        wink = state.get("wink")
-        fired = bool(wink.get("fired")) if isinstance(wink, dict) else False
-        if fired and PASS_KEY not in self._held:
-            self._press(PASS_KEY)
-            self._tap_release_at[PASS_KEY] = now + TAP_SECONDS
+        Guarding on `_held` as well means a gesture held across frames cannot
+        retrigger while its tap is still being released.
+        """
+
+        if bool(view.get("fired")) and action.key not in self._held:
+            self._press(action.key)
+            self._tap_release_at[action.key] = now + TAP_SECONDS
 
     def _expire_taps(self, now: float) -> None:
         for key, due in list(self._tap_release_at.items()):

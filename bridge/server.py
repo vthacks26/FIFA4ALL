@@ -2,7 +2,8 @@
 
 Endpoints:
 
-- `GET  /config`      thresholds and key mapping, so the UI draws truthful zones
+- `GET  /config`      thresholds, key mapping and the active action-to-gesture
+                      bindings, so the UI draws truthful zones and follows rebinds
 - `GET  /events`      Server-Sent Events stream of the control state contract
 - `GET  /stream.mjpg` multipart MJPEG of the tracked camera frames
 - `POST /calibrate`   set the current nose position as neutral
@@ -30,6 +31,7 @@ from bridge.source import ControlSource, MockSource, WebcamSource
 from output.focus import frontmost_application, game_has_focus
 from output.keyboard import QuartzKeyboard, build_keyboard
 from output.session import InputSession
+from tracking.bindings import selectable_channels
 from tracking.controls import DIRECTION_KEYS
 
 DEFAULT_PORT = 8765
@@ -175,6 +177,18 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 {
                     "thresholds": self.hub.source.thresholds.as_dict(),
                     "direction_keys": {k: list(v) for k, v in DIRECTION_KEYS.items()},
+                    # The live action -> channel map, so a drill or a meter
+                    # labels itself from the binding actually in force rather
+                    # than from a gesture name compiled into the UI.
+                    "bindings": self.hub.source.machine.bindings.as_dict(),
+                    # Every channel orientation may offer, with the wording the
+                    # UI should use to ask for it. Only `selectable` channels
+                    # appear: a channel that has not cleared the eligibility
+                    # rule still works when bound but is never proposed.
+                    "channels": [
+                        {"name": channel.name, "label": channel.label}
+                        for channel in selectable_channels()
+                    ],
                     "has_video": isinstance(self.hub.source, WebcamSource),
                     "keyboard_problem": QuartzKeyboard.permission_error(),
                 }

@@ -13,6 +13,7 @@ from bridge.server import build_server
 from bridge.source import MockSource
 from output.keyboard import RecordingKeyboard
 from output.session import InputSession
+from tracking.bindings import selectable_channels
 
 
 def post(url: str, payload: dict[str, object] | None = None) -> tuple[int, dict[str, object]]:
@@ -101,6 +102,28 @@ class BridgeServerTests(unittest.TestCase):
             config = json.loads(response.read())
         self.assertEqual(config["direction_keys"]["NE"], ["W", "D"])
         self.assertEqual(config["direction_keys"]["W"], ["A"])
+
+    def test_config_publishes_the_active_binding_map(self) -> None:
+        with urllib.request.urlopen(self.url("/config"), timeout=5) as response:
+            config = json.loads(response.read())
+        self.assertEqual(config["bindings"], self.source.machine.bindings.as_dict())
+
+    def test_config_publishes_the_channels_the_ui_may_offer(self) -> None:
+        with urllib.request.urlopen(self.url("/config"), timeout=5) as response:
+            config = json.loads(response.read())
+        by_name = {c["name"]: c["label"] for c in config["channels"]}
+        self.assertEqual(
+            by_name, {c.name: c.label for c in selectable_channels()}
+        )
+
+    def test_every_bound_channel_is_one_the_config_describes(self) -> None:
+        """A UI following the map must find a label for whatever is bound."""
+
+        with urllib.request.urlopen(self.url("/config"), timeout=5) as response:
+            config = json.loads(response.read())
+        names = {c["name"] for c in config["channels"]}
+        for channel in config["bindings"].values():
+            self.assertIn(channel, names)
 
     def test_mock_source_reports_no_video(self) -> None:
         with urllib.request.urlopen(self.url("/config"), timeout=5) as response:
