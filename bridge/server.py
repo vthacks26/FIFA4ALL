@@ -423,8 +423,9 @@ def run_product(
     ]
     if preview:
         banner.append(
-            "  --preview opens that intro URL in your default browser "
-            "(no npm run dev)"
+            "  --preview opens the orientation website in your default browser "
+            "(Welcome → practice). The look-axis window stays a separate "
+            "camera/vision overlay — not website chrome. No npm run dev."
         )
     else:
         banner.append(
@@ -462,7 +463,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--preview",
         action="store_true",
-        help="show the look-axis overlay and open the orientation intro in the default browser",
+        help=(
+            "open the orientation website in the default browser and show the "
+            "separate camera/vision look-axis overlay"
+        ),
     )
     parser.add_argument(
         "--no-preview",

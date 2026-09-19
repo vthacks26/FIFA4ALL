@@ -1,8 +1,9 @@
 """Look-axis overlay drawn on the game screen.
 
-The React UI on the second monitor is for the audience. This is for the player:
-a small always-on-top window showing the nose-ball and which keys are firing,
-so they never have to look away from the match.
+The orientation website (browser, http://127.0.0.1:8765/) is a separate UI:
+onboarding, practice, and live telemetry. This native window is camera/vision
+only — the mirrored MacBook frame, face landmarks, WASD look-axis, and RESET.
+Do not draw website chrome (Welcome, training copy, brand shell) here.
 
 Window behaviour comes from `tracking.overlay`, which makes the OpenCV window a
 non-activating panel that floats above a fullscreen Luna without taking focus.
@@ -10,7 +11,7 @@ Stealing focus would stop the keys reaching the game, which is the failure this
 whole overlay exists to make visible.
 
 The geometry is drawn from the same control state the bridge publishes, so the
-overlay, the second monitor, and the keys actually sent can never disagree.
+overlay, the website, and the keys actually sent can never disagree.
 """
 
 from __future__ import annotations

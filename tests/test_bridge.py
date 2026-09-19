@@ -278,6 +278,46 @@ class OrientationLaunchTests(unittest.TestCase):
         self.assertEqual(code, 0)
         opened.assert_not_called()
 
+    def test_preview_opens_website_and_keeps_overlay_separate(self) -> None:
+        """Browser gets the site; overlay is a different native callback."""
+
+        from unittest.mock import patch
+
+        from bridge.server import ControlHub, run_product
+
+        with patch("bridge.server.webbrowser.open", return_value=True) as opened:
+            with patch.object(ControlHub, "run", return_value=None) as hub_run:
+                with patch("bridge.server._build_overlay", return_value="overlay-cb") as build:
+                    code = run_product(preview=True, mock=True, port=0, armed=False)
+        self.assertEqual(code, 0)
+        opened.assert_called_once()
+        build.assert_called_once()
+        hub_run.assert_called_once_with(on_frame="overlay-cb")
+
+
+class OverlayStaysSeparateTests(unittest.TestCase):
+    def test_overlay_is_vision_hud_not_website_chrome(self) -> None:
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parent.parent
+        overlay = (root / "bridge" / "overlay_view.py").read_text(encoding="utf-8")
+        live = (root / "onboarding" / "src" / "screens" / "Live.tsx").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Reset center", live)
+        self.assertIn("calibrate", live)
+        for phrase in (
+            '"Find your center"',
+            '"Welcome"',
+            '"Redo training"',
+            '"WELCOME"',
+            '"Training Camp"',
+        ):
+            self.assertNotIn(phrase, overlay)
+        self.assertIn('"RESET"', overlay)
+        self.assertIn('"NO FACE"', overlay)
+        self.assertIn('"FIFA4ALL"', overlay)
+
 
 class WebcamCalibrateTests(unittest.TestCase):
     def test_site_reset_recentres_the_same_machine_without_opening_a_camera(self) -> None:
@@ -303,6 +343,38 @@ class WebcamCalibrateTests(unittest.TestCase):
         self.assertEqual(after["keys"], [])
         self.assertEqual(source.machine.mouth_rest, 0.04)
         self.assertEqual(source.machine.eye_rest, 0.08)
+
+    def test_a_second_site_reset_still_drives_the_same_injector(self) -> None:
+        """Website RESET stays live after the first calibrate; same machine."""
+
+        from bridge.source import WebcamSource
+
+        source = WebcamSource()
+        source.machine.calibrate((0.5, 0.5))
+        first = (0.70, 0.50)
+        source.calibrate()
+        source.apply_pending_calibrate(
+            first,
+            {"mouth_opening": 0.04, "left_eye_opening": 0.08, "right_eye_opening": 0.08},
+        )
+        self.assertEqual(
+            source.machine.update(nose=first, features={}, tracking_valid=True)["keys"],
+            [],
+        )
+
+        second = (0.30, 0.50)
+        moved = source.machine.update(nose=second, features={}, tracking_valid=True)
+        self.assertEqual(moved["keys"], ["A"])
+
+        source.calibrate()
+        source.apply_pending_calibrate(
+            second,
+            {"mouth_opening": 0.05, "left_eye_opening": 0.08, "right_eye_opening": 0.08},
+        )
+        after = source.machine.update(nose=second, features={}, tracking_valid=True)
+        self.assertTrue(after["centered"])
+        self.assertEqual(after["keys"], [])
+        self.assertEqual(source.machine.mouth_rest, 0.05)
 
 
 if __name__ == "__main__":

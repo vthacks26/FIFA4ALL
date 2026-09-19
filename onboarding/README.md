@@ -28,18 +28,20 @@ The live product already serves this UI. From the repository root:
 MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --preview
 ```
 
-That opens **http://127.0.0.1:8765/** (Welcome / intro) in your default
-browser. Drag that window to the second monitor. Same MacBook camera, Quartz
-holds, and RESET as the look-axis overlay. Do not start `npm run dev` and do
-not start a second camera.
+That auto-opens **http://127.0.0.1:8765/** (Welcome → practice → live HUD) in
+your default browser. Drag that window to the second monitor. The native
+look-axis overlay stays a **separate** camera/vision window — website chrome
+is not drawn there. Same MacBook camera and Quartz holds. Do not start
+`npm run dev` and do not start a second camera.
 
 `--no-preview` still serves the same URL (inject + UI server) but does **not**
 open a browser, so Luna can keep keyboard focus. Open the URL yourself only
 when you are not mid-match.
 
-**Find your center** (and overlay RESET) recentre that same live tracker. Pose
-calibration is not stored in the browser; it lives in the `tracking.live`
-process and is what Quartz uses for WASD / Space / L.
+**Find your center** and the live **Reset center** control (and overlay RESET)
+recentre that same live tracker for the whole session. Pose calibration is not
+stored in the browser; it lives in the `tracking.live` process and is what
+Quartz uses for WASD / Space / L.
 
 UI-only mock, no webcam:
 

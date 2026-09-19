@@ -22,7 +22,7 @@ source .venv-mediapipe/bin/activate
 python -m pip install -r tracking/requirements.txt
 ```
 
-`tracking/requirements.txt` is the webcam runtime: `mediapipe==0.10.14`, `opencv-python`, and `numpy`. On Apple Silicon you can create the venv with Homebrew Python 3.12 instead:
+`tracking/requirements.txt` is the webcam runtime: `mediapipe==0.10.14`, `protobuf>=4.25.3,<5` (Face Mesh still uses `GetPrototype`; protobuf 5+ removed it), `opencv-python`, and `numpy`. On Apple Silicon you can create the venv with Homebrew Python 3.12 instead:
 
 ```bash
 brew install python@3.12
@@ -33,13 +33,13 @@ Always run the live module from the **repository root** so `python -m tracking.l
 
 ## Run
 
-One command starts inject, the orientation website, and (with `--preview`) the look-axis overlay. It also opens the intro/welcome page in your default browser. You do **not** need `npm run dev`.
+One process starts Quartz inject and the orientation website. With `--preview` it also opens that website in your default browser and shows a **separate** native camera overlay. You do **not** need `npm run dev`. The two UIs stay split: website chrome never moves into the look-axis window.
 
 ```bash
 MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --preview
 ```
 
-That opens **http://127.0.0.1:8765/** — the Welcome / training-camp screen (`WELCOME`). Same process serves every later orientation route from that origin.
+That auto-opens **http://127.0.0.1:8765/** — Welcome, then the pushed onboarding / practice / live-telemetry flow (`WELCOME` → drills → `LIVE_TELEMETRY`). Same process serves every later orientation route from that origin.
 
 Headless inject (same mapping and UI server, **no** overlay and **no** browser — so Luna can keep keyboard focus):
 
@@ -54,12 +54,12 @@ Do not start this from another directory, and do not point OpenCV at Continuity 
 ## Play on Luna
 
 1. Grant Camera and Accessibility (below), then start `--preview` (demo / orientation) or `--no-preview` (match, Luna already focused).
-2. Open **Google Chrome** → Amazon Luna → EA Sports FC. (`--preview` already opened the orientation intro in your default browser; click Luna when you are ready to play.)
+2. On `--preview`, go through the website flow that just opened. When you are ready to play, open **Google Chrome** → Amazon Luna → EA Sports FC.
 3. **Click the game** so Chrome / Luna is focused. OS keys go to the frontmost app; if Chrome is not frontmost, the injector warns and keys will land somewhere else.
-4. Sit straight in frame. Tap the orange **RESET** on the `FIFA4ALL look axis` overlay (preview mode) so the next valid face pose is neutral.
+4. Sit straight. Recentre from the website (**Find your center**, then **Reset center** on the live HUD) or tap **RESET** on the look-axis overlay. Both hit the same live session.
 5. Look, open your mouth, or wink. Holds stay down until you return to center / close your mouth / stop winking.
 
-Calibration on the orientation site (**Find your center**) and overlay **RESET** both call `POST /calibrate` on this same process. That recentres the one tracker that injects WASD / Space / L into Luna — there is no second live session. Keep the process running when you switch from the website to the match.
+Positioning on the website (SSE) and **RESET / calibrate** stay live for the whole process. **Find your center**, **Reset center**, and overlay **RESET** all call `POST /calibrate` on this same process. That recentres the one tracker that injects WASD / Space / L into Luna — there is no second live session. Keep the process running when you switch from the website to the match.
 
 ### Mappings
 
@@ -71,13 +71,18 @@ Calibration on the orientation site (**Find your center**) and overlay **RESET**
 
 The first valid nose point after start or Reset is the joystick center. Returning to that center releases WASD. Combinations are allowed (for example look + shoot).
 
-### Overlay
+### Two windows (they stay separate)
 
-`--preview` opens two things: your default browser at **http://127.0.0.1:8765/** (the intro website), and a floating, non-activating window titled **`FIFA4ALL look axis`**. The overlay shows the MacBook camera frame, face landmarks, the WASD look-axis, current keys, and an orange **RESET** control (plus a real AppKit Reset button on the window). Sit straight, then tap **RESET** to clear the pose baseline and recapture neutral.
+`--preview` opens **two** UIs. They are not combined:
+
+| Window | What it is |
+| --- | --- |
+| Default browser → **http://127.0.0.1:8765/** | Orientation website: Welcome, controls, Find your center, practice drills, live telemetry, **Reset center**. Website chrome lives only here. |
+| Native **`FIFA4ALL look axis`** | Camera / vision overlay only: mirrored MacBook frame, face landmarks, WASD look-axis, current keys, orange **RESET**. No onboarding chrome. |
 
 `--no-preview` does not open a browser, because raising a window would steal keyboard focus from Luna.
 
-The overlay is meant to stay above Luna without stealing key focus. **Exclusive fullscreen still covers it.** Press **Esc** to leave exclusive fullscreen if you need to see Reset or the look-axis HUD.
+The overlay is meant to stay above Luna without stealing key focus. **Exclusive fullscreen still covers it.** Press **Esc** to leave exclusive fullscreen if you need to see the look-axis HUD.
 
 ## Permissions
 
@@ -114,8 +119,9 @@ More tracking notes: [`tracking/README.md`](tracking/README.md). Orientation scr
 
 `python -m tracking.live` is the only match path. The same process owns the
 MacBook camera, Quartz HID holds, the look-axis overlay + RESET, and the
-orientation UI at http://127.0.0.1:8765/ . `--preview` opens that intro URL
-in the default browser. Do not start `bridge.server` or `npm run dev` for a
+orientation website at http://127.0.0.1:8765/ . `--preview` auto-opens that
+website (onboarding / practice / live HUD) and keeps the camera overlay as a
+separate vision window. Do not start `bridge.server` or `npm run dev` for a
 match — that would be a second, disconnected stack.
 
 ```bash

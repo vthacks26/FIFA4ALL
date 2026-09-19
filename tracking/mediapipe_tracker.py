@@ -62,6 +62,12 @@ class WebcamFaceTracker:
 
     def start(self) -> None:
         os.environ.setdefault("MPLCONFIGDIR", os.path.join(os.getcwd(), ".cache", "matplotlib"))
+        from tracking.protobuf_compat import silence_getprototype_userwarning
+
+        # mediapipe==0.10.14 is pinned to protobuf 4.25.x, which still warns
+        # that GetPrototype is deprecated. Filter that one UserWarning before
+        # import so Face Mesh startup does not spam the demo console.
+        silence_getprototype_userwarning()
         import cv2  # type: ignore[import-not-found]
         import mediapipe as mp  # type: ignore[import-not-found]
 

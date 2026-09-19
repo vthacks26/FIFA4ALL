@@ -51,10 +51,11 @@ The diagnostic opens a webcam preview, overlays live feature values, shows track
 
 For Quartz OS key holds into the frontmost app (Google Chrome / Luna), MacBook camera only.
 
-Face + WASD look-axis overlay (non-activating, not click-through), and the
-orientation intro at http://127.0.0.1:8765/ in your default browser. Sit
-straight and tap the **Reset** button on the look-axis window to recapture the
-neutral nose axis:
+`--preview` auto-opens the orientation website at http://127.0.0.1:8765/
+(Welcome / practice / live HUD) and a **separate** Face + WASD look-axis
+overlay (camera/vision only; non-activating). Recentre from the website
+(**Find your center** / **Reset center**) or the overlay **Reset** — both
+drive the same live injector:
 
 ```bash
 MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --preview
