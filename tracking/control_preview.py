@@ -180,33 +180,61 @@ def _draw_joystick(
 ) -> None:
     height, width = frame.shape[:2]
     nose = _nose_point(landmarks)
-    if nose is None:
+    if nose is None or joystick.center is None:
         return
+
+    # 1. Setup coordinates
     nose_px = (int(nose[0] * width), int(nose[1] * height))
-    cv2.circle(frame, nose_px, 5, (0, 255, 0), -1)
-    if joystick.center is None:
-        return
     center_px = (int(joystick.center[0] * width), int(joystick.center[1] * height))
-    deadzone_px = (
-        int(thresholds.joystick_deadzone_x * width),
-        int(thresholds.joystick_deadzone_y * height),
-    )
-    cv2.line(frame, (0, center_px[1]), (width, center_px[1]), (255, 120, 40), 1)
-    cv2.line(frame, (center_px[0], 0), (center_px[0], height), (255, 120, 40), 1)
-    cv2.rectangle(
-        frame,
-        (center_px[0] - deadzone_px[0], center_px[1] - deadzone_px[1]),
-        (center_px[0] + deadzone_px[0], center_px[1] + deadzone_px[1]),
-        (255, 120, 40),
-        2,
-    )
-    cv2.circle(frame, center_px, 4, (255, 120, 40), -1)
-    cv2.putText(frame, "W", (center_px[0] + 8, max(24, center_px[1] - deadzone_px[1] - 12)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 120, 40), 2, cv2.LINE_AA)
-    cv2.putText(frame, "S", (center_px[0] + 8, min(height - 12, center_px[1] + deadzone_px[1] + 28)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 120, 40), 2, cv2.LINE_AA)
-    cv2.putText(frame, "D", (max(8, center_px[0] - deadzone_px[0] - 30), center_px[1] - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 120, 40), 2, cv2.LINE_AA)
-    cv2.putText(frame, "A", (min(width - 28, center_px[0] + deadzone_px[0] + 10), center_px[1] - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 120, 40), 2, cv2.LINE_AA)
+    
+    # Calculate the boundary lines based on your thresholds
+    dx = int(thresholds.joystick_deadzone_x * width)
+    dy = int(thresholds.joystick_deadzone_y * height)
 
+    # Zone Boundaries (Lines that separate the areas)
+    left_line = center_px[0] - dx
+    right_line = center_px[0] + dx
+    top_line = center_px[1] - dy
+    bottom_line = center_px[1] + dy
 
+    grid_color = (255, 120, 40)  # Orange
+    active_color = (0, 255, 0)   # Green for the nose
+    font = cv2.FONT_HERSHEY_SIMPLEX
+
+    # 2. DRAW THE GRID (Creating the "Areas")
+    # Vertical boundary lines
+    cv2.line(frame, (left_line, 0), (left_line, height), grid_color, 1)
+    cv2.line(frame, (right_line, 0), (right_line, height), grid_color, 1)
+    # Horizontal boundary lines
+    cv2.line(frame, (0, top_line), (width, top_line), grid_color, 1)
+    cv2.line(frame, (0, bottom_line), (width, bottom_line), grid_color, 1)
+
+    # 3. LABEL THE AREAS (So you know exactly where to put your nose)
+    # The current logic in suggested_keys: A is Right, D is Left, W is Up, S is Down
+    
+    # Corners (Diagonal Areas)
+    cv2.putText(frame, "WD", (20, 40), font, 0.8, grid_color, 2)            # Top-Left
+    cv2.putText(frame, "WA", (width - 70, 40), font, 0.8, grid_color, 2)   # Top-Right
+    cv2.putText(frame, "DS", (20, height - 20), font, 0.8, grid_color, 2)  # Bottom-Left
+    cv2.putText(frame, "AS", (width - 70, height - 20), font, 0.8, grid_color, 2) # Bottom-Right
+
+    # Cardinal Areas
+    cv2.putText(frame, "W", (center_px[0] - 10, 40), font, 0.8, grid_color, 2)
+    cv2.putText(frame, "S", (center_px[0] - 10, height - 20), font, 0.8, grid_color, 2)
+    cv2.putText(frame, "D", (20, center_px[1] + 10), font, 0.8, grid_color, 2)
+    cv2.putText(frame, "A", (width - 40, center_px[1] + 10), font, 0.8, grid_color, 2)
+
+    # Neutral Center
+    cv2.putText(frame, "Neutral", (center_px[0] - 30, center_px[1] + 5), font, 0.5, grid_color, 1)
+
+    # 4. DRAW THE NOSE TRACKER
+    # Draw a circle for the nose so the user can see which box they are in
+    cv2.circle(frame, nose_px, 8, active_color, -1)
+    
+    # Optional: Draw a small line from center to nose to show direction
+    cv2.line(frame, center_px, nose_px, active_color, 2)
+
+    
 def _draw_lines(cv2: object, frame: object, lines: list[str]) -> None:
     for index, line in enumerate(lines):
         cv2.putText(
