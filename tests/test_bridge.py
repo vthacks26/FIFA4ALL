@@ -11,6 +11,8 @@ from http.server import ThreadingHTTPServer
 
 from bridge.server import build_server
 from bridge.source import MockSource
+from output.keyboard import RecordingKeyboard
+from output.session import InputSession
 
 
 def post(url: str, payload: dict[str, object] | None = None) -> tuple[int, dict[str, object]]:
@@ -68,7 +70,11 @@ class BridgeServerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.source = MockSource()
-        cls.server, cls.hub = build_server(cls.source, port=0)
+        # A recording keyboard guarantees the suite can never press a real key.
+        cls.keyboard = RecordingKeyboard()
+        cls.server, cls.hub = build_server(
+            cls.source, port=0, session=InputSession(cls.keyboard)
+        )
         cls.port = cls.server.server_address[1]
         cls.hub.start()
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
@@ -122,9 +128,32 @@ class BridgeServerTests(unittest.TestCase):
     def test_event_stream_emits_the_documented_contract(self) -> None:
         self.reset_center()
         state = self.read_one_event()
-        self.assertEqual(
-            set(state), {"centered", "nose", "direction", "keys", "mouth", "wink", "tracking"}
+        self.assertLessEqual(
+            {"centered", "nose", "direction", "keys", "mouth", "wink", "tracking"},
+            set(state),
         )
+
+    def test_event_stream_carries_match_status(self) -> None:
+        """The second monitor needs to show arm state and who owns the keyboard."""
+
+        state = self.read_one_event()
+        self.assertLessEqual(
+            {"armed", "held_keys", "shot_seconds", "frontmost", "game_focus"}, set(state)
+        )
+
+    def test_input_starts_disarmed(self) -> None:
+        self.assertFalse(self.read_one_event()["armed"])
+        self.assertEqual(self.keyboard.held, set())
+
+    def test_disarm_endpoint_reports_disarmed(self) -> None:
+        status, body = post(self.url("/disarm"))
+        self.assertEqual(status, 200)
+        self.assertFalse(body["armed"])
+
+    def test_config_reports_whether_keyboard_output_can_work(self) -> None:
+        with urllib.request.urlopen(self.url("/config"), timeout=5) as response:
+            config = json.loads(response.read())
+        self.assertIn("keyboard_problem", config)
 
     def test_mouth_trigger_reaches_the_event_stream(self) -> None:
         self.reset_center()

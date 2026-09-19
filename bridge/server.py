@@ -6,6 +6,8 @@ Endpoints:
 - `GET  /events`      Server-Sent Events stream of the control state contract
 - `GET  /stream.mjpg` multipart MJPEG of the tracked camera frames
 - `POST /calibrate`   set the current nose position as neutral
+- `POST /arm`         start sending real key events to the focused application
+- `POST /disarm`      stop sending key events and release everything held
 - `POST /mock`        drive the mock source from the frontend dev panel
 
 Server-Sent Events and multipart MJPEG are both plain HTTP, so this needs no
@@ -24,6 +26,9 @@ from time import monotonic
 from typing import Any
 
 from bridge.source import ControlSource, MockSource, WebcamSource
+from output.focus import frontmost_application, game_has_focus
+from output.keyboard import QuartzKeyboard, build_keyboard
+from output.session import InputSession
 from tracking.controls import DIRECTION_KEYS
 
 DEFAULT_PORT = 8765
@@ -36,8 +41,15 @@ class ControlHub:
     slow browser tab falls behind by dropping frames instead of adding latency.
     """
 
-    def __init__(self, source: ControlSource) -> None:
+    # Listing on-screen windows is not free, so the frontmost application is
+    # sampled a few times a second rather than on every tracked frame.
+    FOCUS_POLL_SECONDS = 0.4
+
+    def __init__(self, source: ControlSource, session: InputSession) -> None:
         self.source = source
+        self.session = session
+        self._focus: str | None = None
+        self._focus_checked_at = 0.0
         self._lock = threading.Condition()
         self._state: dict[str, object] = {}
         self._frame: bytes | None = None
@@ -54,6 +66,10 @@ class ControlHub:
             for state, frame in self.source.frames():
                 if self._stopped:
                     return
+                # Drive the real keyboard before publishing, so the UI never
+                # shows a state the game has not already been sent.
+                self.session.apply(state)
+                state = {**state, **self._match_status()}
                 with self._lock:
                     self._state = state
                     if frame is not None:
@@ -66,8 +82,24 @@ class ControlHub:
                 self._sequence += 1
                 self._lock.notify_all()
 
+    def _match_status(self) -> dict[str, object]:
+        """Input-layer facts the second monitor needs during a match."""
+
+        now = monotonic()
+        if now - self._focus_checked_at >= self.FOCUS_POLL_SECONDS:
+            self._focus = frontmost_application()
+            self._focus_checked_at = now
+        return {
+            "armed": self.session.armed,
+            "held_keys": sorted(self.session.held_keys),
+            "shot_seconds": round(self.session.shot_seconds, 3),
+            "frontmost": self._focus,
+            "game_focus": game_has_focus(self._focus),
+        }
+
     def stop(self) -> None:
         self._stopped = True
+        self.session.disarm()
         self.source.stop()
         with self._lock:
             self._lock.notify_all()
@@ -104,6 +136,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
                     "thresholds": self.hub.source.thresholds.as_dict(),
                     "direction_keys": {k: list(v) for k, v in DIRECTION_KEYS.items()},
                     "has_video": isinstance(self.hub.source, WebcamSource),
+                    "keyboard_problem": QuartzKeyboard.permission_error(),
                 }
             )
         elif self.path.startswith("/events"):
@@ -117,6 +150,16 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if self.path.startswith("/calibrate"):
             self.hub.source.calibrate()
             self._send_json({"ok": True})
+        elif self.path.startswith("/arm"):
+            problem = QuartzKeyboard.permission_error()
+            if problem is not None:
+                self._send_json({"error": problem}, status=409)
+                return
+            self.hub.session.arm()
+            self._send_json({"ok": True, "armed": True})
+        elif self.path.startswith("/disarm"):
+            self.hub.session.disarm()
+            self._send_json({"ok": True, "armed": False})
         elif self.path.startswith("/mock"):
             payload = self._read_json()
             source = self.hub.source
@@ -205,8 +248,12 @@ class QuietThreadingHTTPServer(ThreadingHTTPServer):
         super().handle_error(request, client_address)  # type: ignore[arg-type]
 
 
-def build_server(source: ControlSource, port: int = DEFAULT_PORT) -> tuple[ThreadingHTTPServer, ControlHub]:
-    hub = ControlHub(source)
+def build_server(
+    source: ControlSource,
+    port: int = DEFAULT_PORT,
+    session: InputSession | None = None,
+) -> tuple[ThreadingHTTPServer, ControlHub]:
+    hub = ControlHub(source, session or InputSession(build_keyboard()))
     handler = type("BoundBridgeHandler", (BridgeHandler,), {"hub": hub})
     server = QuietThreadingHTTPServer(("127.0.0.1", port), handler)
     return (server, hub)
@@ -225,7 +272,11 @@ def main() -> int:
 
     mode = "mock" if args.mock else "webcam"
     print(f"FIFA4ALL bridge ({mode}) on http://127.0.0.1:{args.port}")
-    print("  /config  /events  /stream.mjpg  POST /calibrate")
+    print("  /config  /events  /stream.mjpg  POST /calibrate  POST /arm  POST /disarm")
+    print("  keyboard output starts DISARMED; arm it from the second monitor")
+    problem = QuartzKeyboard.permission_error()
+    if problem is not None:
+        print(f"\n  keyboard output unavailable:\n  {problem}\n")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
