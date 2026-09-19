@@ -1,48 +1,25 @@
 /**
  * Low-poly footballer.
  *
- * These are the reference renders supplied with the brief, cut out of
- * `assets/low-poly-reference-{front,back}.png` by `tools/extract_players.py`.
- * Hand-drawn SVG polygons were never going to match a 3D render: the faceted
- * shading, kit detail and proportions are the whole look, and approximating
- * them by hand produced a paper doll.
+ * Every pose is its own rendered frame. The previous sprites had only a front
+ * and a back view, so `run`, `shoot` and `pass` were the same standing figure
+ * under a CSS transform — the legs never moved, and no amount of bounce hid it.
  *
- * The trade is articulation. A sprite cannot swing its own legs, so the poses
- * TECHNICAL_SPEC asks for are built from whole-figure motion: weight shifts,
- * leans, bounce and squash. Read against a moving ball and a reacting net that
- * carries the action, and it keeps animation timing fully decoupled from the
- * control pipeline.
+ * Running is the case that needs two frames rather than one. A single stride
+ * held still reads as a man frozen mid-air being slid across the grass, so each
+ * kit carries two opposite phases of the stride and CSS alternates them. The
+ * rest of the motion (bob, lean, squash) still rides on top, but it is now
+ * decoration over real articulation instead of a substitute for it.
  */
 
 import "./Player.css";
 
-export type PlayerPose = "idle" | "run" | "shoot" | "pass" | "receive" | "celebrate";
+export type PlayerPose =
+  "idle" | "run" | "shoot" | "pass" | "receive" | "celebrate";
 
-/** Each kit is a distinct character from the reference sheet. */
-export type PlayerKit = "lime" | "teal" | "purple" | "amber" | "crimson" | "slate";
-
-const FRONT_INDEX: Record<PlayerKit, number> = {
-  crimson: 1,
-  lime: 2,
-  amber: 3,
-  slate: 4,
-  teal: 5,
-  purple: 6,
-};
-
-/**
- * The back reference sheet lists the same six players in reverse order, so the
- * indices do not line up with the front sheet. Without this the player changes
- * identity the moment they turn to run north.
- */
-const BACK_INDEX: Record<PlayerKit, number> = {
-  crimson: 6,
-  lime: 5,
-  amber: 4,
-  slate: 3,
-  teal: 2,
-  purple: 1,
-};
+/** Each kit is a distinct character, generated as a matched set of poses. */
+export type PlayerKit =
+  "lime" | "teal" | "purple" | "amber" | "crimson" | "slate";
 
 export type Facing = "N" | "NE" | "E" | "SE" | "S" | "SW" | "W" | "NW";
 
@@ -63,15 +40,46 @@ const MIRRORED: ReadonlySet<Facing> = new Set<Facing>(["W", "NW", "SW"]);
 
 /** A small yaw sells the turn without distorting the figure. */
 const YAW: Record<Facing, number> = {
-  N: 0, S: 0, NE: 12, SE: 12, E: 20, NW: -12, SW: -12, W: -20,
+  N: 0,
+  S: 0,
+  NE: 12,
+  SE: 12,
+  E: 20,
+  NW: -12,
+  SW: -12,
+  W: -20,
 };
 
-export function Player({ pose = "idle", kit = "lime", size = 220, facing = null }: PlayerProps) {
+/**
+ * Receiving is a player waiting on the ball, which is the idle stance. It has
+ * no frame of its own rather than a near-duplicate of one.
+ */
+const FRAME_FOR_POSE: Record<PlayerPose, string> = {
+  idle: "idle",
+  run: "run",
+  shoot: "shoot",
+  pass: "pass",
+  receive: "idle",
+  celebrate: "celebrate",
+};
+
+function spriteUrl(kit: PlayerKit, frame: string): string {
+  return `${import.meta.env.BASE_URL}players/${kit}-${frame}.png`;
+}
+
+export function Player({
+  pose = "idle",
+  kit = "lime",
+  size = 220,
+  facing = null,
+}: PlayerProps) {
   const away = facing !== null && AWAY.has(facing);
-  const view = away ? "back" : "front";
-  const index = away ? BACK_INDEX[kit] : FRONT_INDEX[kit];
   const mirrored = facing !== null && MIRRORED.has(facing);
   const yaw = facing === null ? 0 : YAW[facing];
+
+  // Turning upfield shows the back, which only exists as a standing frame.
+  const frame = away ? "back" : FRAME_FOR_POSE[pose];
+  const running = pose === "run" && !away;
 
   return (
     <div
@@ -79,12 +87,29 @@ export function Player({ pose = "idle", kit = "lime", size = 220, facing = null 
       style={{ height: size, ["--yaw" as string]: `${yaw}deg` }}
       aria-hidden="true"
     >
-      <img
-        className="player__sprite"
-        src={`${import.meta.env.BASE_URL}players/${view}-${index}.png`}
-        alt=""
-        draggable={false}
-      />
+      {running ? (
+        <>
+          <img
+            className="player__sprite player__sprite--stride-a"
+            src={spriteUrl(kit, "run")}
+            alt=""
+            draggable={false}
+          />
+          <img
+            className="player__sprite player__sprite--stride-b"
+            src={spriteUrl(kit, "runb")}
+            alt=""
+            draggable={false}
+          />
+        </>
+      ) : (
+        <img
+          className="player__sprite"
+          src={spriteUrl(kit, frame)}
+          alt=""
+          draggable={false}
+        />
+      )}
     </div>
   );
 }

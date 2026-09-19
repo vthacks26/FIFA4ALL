@@ -1,7 +1,7 @@
 /* Sprite-based poses.
-   A cut-out cannot articulate its limbs, so every pose is whole-figure motion:
-   weight shift, lean, bounce, squash. Paired with a moving ball and a
-   reacting net, that reads as the action without faking articulation. */
+   Each pose is its own rendered frame, so the limbs genuinely change between
+   them. The whole-figure motion below (weight shift, lean, bounce, squash) now
+   rides on top of real articulation rather than standing in for it. */
 
 .player {
   position: relative;
@@ -32,26 +32,103 @@
 }
 
 @keyframes player-idle {
-  50% { transform: translateY(-2px) scaleY(1.008); }
+  50% {
+    transform: translateY(-2px) scaleY(1.008);
+  }
 }
 
-/* ---- run: quick vertical bounce with a forward lean ---- */
-.player--run .player__sprite {
+/* ---- run: a two-frame stride cycle, with bounce layered over it ----
+   The two stride frames are stacked and swapped on a hard cut. `steps(1, end)`
+   rather than a fade, because cross-fading two different leg positions reads as
+   a ghost rather than a step. The bounce below runs at twice the stride rate,
+   so the figure rises once per footfall. */
+/* Grid stacking rather than absolute positioning: both frames occupy the same
+   cell, so they stay centred and bottom-aligned without needing a transform of
+   their own, which the bounce animation already owns. */
+.player--run:has(.player__sprite--stride-a) {
+  display: grid;
+  /* The row must be sized explicitly. A content-sized row makes the sprites'
+     `height: 100%` resolve to auto, so they render at their natural 900px and
+     burst out of the layout. */
+  grid-template-rows: minmax(0, 100%);
+  align-items: end;
+  justify-items: center;
+}
+
+.player--run .player__sprite--stride-a,
+.player--run .player__sprite--stride-b {
+  grid-area: 1 / 1;
+  animation:
+    player-run 0.34s ease-in-out infinite,
+    player-stride 0.34s steps(1, end) infinite;
+}
+
+.player--run .player__sprite--stride-b {
+  animation-name: player-run, player-stride-offset;
+}
+
+@keyframes player-stride {
+  0%,
+  49.99% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes player-stride-offset {
+  0%,
+  49.99% {
+    opacity: 0;
+  }
+  50%,
+  100% {
+    opacity: 1;
+  }
+}
+
+/* The back view has no stride pair, so it keeps the bounce on its own. */
+.player--run
+  .player__sprite:not(.player__sprite--stride-a):not(
+    .player__sprite--stride-b
+  ) {
   animation: player-run 0.34s ease-in-out infinite;
 }
 
 @keyframes player-run {
-  0%, 100% { transform: translateY(0) rotate(-1.5deg); }
-  50% { transform: translateY(-9px) rotate(1.5deg) scaleY(1.02); }
+  0%,
+  100% {
+    transform: translateY(0) rotate(-1.5deg);
+  }
+  50% {
+    transform: translateY(-9px) rotate(1.5deg) scaleY(1.02);
+  }
 }
 
 .player.is-mirrored.player--run .player__sprite {
   animation-name: player-run-mirrored;
 }
 
+/* Mirroring only swaps the bounce keyframes; naming one animation here would
+   drop the stride swap that shares the shorthand, so both are restated. */
+.player.is-mirrored.player--run .player__sprite--stride-a {
+  animation-name: player-run-mirrored, player-stride;
+}
+
+.player.is-mirrored.player--run .player__sprite--stride-b {
+  animation-name: player-run-mirrored, player-stride-offset;
+}
+
 @keyframes player-run-mirrored {
-  0%, 100% { transform: scaleX(-1) translateY(0) rotate(1.5deg); }
-  50% { transform: scaleX(-1) translateY(-9px) rotate(-1.5deg) scaleY(1.02); }
+  0%,
+  100% {
+    transform: scaleX(-1) translateY(0) rotate(1.5deg);
+  }
+  50% {
+    transform: scaleX(-1) translateY(-9px) rotate(-1.5deg) scaleY(1.02);
+  }
 }
 
 /* ---- shoot: wind up, then snap through the ball ---- */
@@ -60,10 +137,18 @@
 }
 
 @keyframes player-shoot {
-  0% { transform: rotate(0deg); }
-  28% { transform: rotate(-9deg) translateX(-5px) scaleY(0.98); }
-  52% { transform: rotate(11deg) translateX(8px) scaleY(1.02); }
-  100% { transform: rotate(0deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  28% {
+    transform: rotate(-9deg) translateX(-5px) scaleY(0.98);
+  }
+  52% {
+    transform: rotate(11deg) translateX(8px) scaleY(1.02);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
 }
 
 /* ---- pass: a shorter, inside-foot version of the same move ---- */
@@ -72,10 +157,18 @@
 }
 
 @keyframes player-pass {
-  0% { transform: rotate(0deg); }
-  35% { transform: rotate(-5deg) translateX(-3px); }
-  60% { transform: rotate(6deg) translateX(5px); }
-  100% { transform: rotate(0deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  35% {
+    transform: rotate(-5deg) translateX(-3px);
+  }
+  60% {
+    transform: rotate(6deg) translateX(5px);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
 }
 
 /* ---- receive: absorb the ball, weight back ---- */
@@ -84,7 +177,9 @@
 }
 
 @keyframes player-receive {
-  40% { transform: translateX(7px) scaleY(0.96) rotate(3deg); }
+  40% {
+    transform: translateX(7px) scaleY(0.96) rotate(3deg);
+  }
 }
 
 /* ---- celebrate: repeated hop ---- */
@@ -93,8 +188,13 @@
 }
 
 @keyframes player-celebrate {
-  0%, 100% { transform: translateY(0) rotate(-2deg); }
-  45% { transform: translateY(-20px) rotate(2deg) scaleY(1.03); }
+  0%,
+  100% {
+    transform: translateY(0) rotate(-2deg);
+  }
+  45% {
+    transform: translateY(-20px) rotate(2deg) scaleY(1.03);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
