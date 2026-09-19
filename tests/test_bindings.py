@@ -13,6 +13,7 @@ from tracking.bindings import (
     default_bindings,
     selectable_channels,
 )
+from tracking.frames import FEATURE_DOCUMENTATION, FEATURE_UNITS
 
 
 class DefaultBindingTests(unittest.TestCase):
@@ -98,12 +99,92 @@ class ChannelValidationTests(unittest.TestCase):
                 self.assertIsNotNone(channel.rest_feature, channel.name)
 
 
+class ChannelVocabularyTests(unittest.TestCase):
+    """Phase 3: the movements a player can choose between."""
+
+    def test_every_channel_reads_features_the_extractor_publishes(self) -> None:
+        for channel in CHANNELS.values():
+            for feature in channel.required_features:
+                self.assertIn(feature, FEATURE_UNITS, f"{channel.name} -> {feature}")
+
+    def test_every_channel_documents_its_features(self) -> None:
+        for channel in CHANNELS.values():
+            self.assertIn(channel.feature, FEATURE_DOCUMENTATION, channel.name)
+
+    def test_every_channel_samples_a_resting_value_for_this_user(self) -> None:
+        """Eligibility rule 1: no hardcoded resting constant."""
+        for channel in CHANNELS.values():
+            self.assertIsNotNone(channel.rest_feature, channel.name)
+
+    def test_every_channel_has_a_hysteresis_pair(self) -> None:
+        """Eligibility rule 2: trigger high, release low."""
+        for channel in CHANNELS.values():
+            self.assertLess(channel.default_off, channel.default_on, channel.name)
+
+    def test_brow_raise_is_gated_on_the_head_staying_level(self) -> None:
+        channel = CHANNELS["brow_raise"]
+
+        self.assertEqual(channel.gate, "head_level")
+        self.assertIn("head_pitch", channel.required_features)
+        self.assertTrue(channel.selectable)
+
+    def test_smile_width_is_gated_on_the_mouth_staying_near_rest(self) -> None:
+        channel = CHANNELS["smile_width"]
+
+        self.assertEqual(channel.gate, "mouth_near_rest")
+        self.assertIn("mouth_opening", channel.required_features)
+        self.assertTrue(channel.selectable)
+
+    def test_jaw_lateral_is_gated_on_facing_forward(self) -> None:
+        channel = CHANNELS["jaw_lateral"]
+
+        self.assertEqual(channel.gate, "facing_forward")
+        self.assertIn("head_turn", channel.required_features)
+        self.assertTrue(channel.use_magnitude)
+        self.assertTrue(channel.selectable)
+
+    def test_cheek_puff_is_not_offered_because_yaw_swamps_it(self) -> None:
+        self.assertFalse(CHANNELS["cheek_puff"].selectable)
+
+    def test_mouth_pucker_is_not_offered_because_it_co_fires_with_shoot(self) -> None:
+        channel = CHANNELS["mouth_pucker"]
+
+        self.assertFalse(channel.selectable)
+        # It declares the channels it collides with so Phase 4 scoring can see
+        # the co-fire rather than having to rediscover it.
+        self.assertIn("mouth_opening", channel.required_features)
+        self.assertIn("mouth_width", channel.required_features)
+
+    def test_an_ungated_channel_is_never_offered_alongside_a_gated_one(self) -> None:
+        """Eligibility rule 3, as far as the registry can enforce it.
+
+        mouth_open is the exception this cannot cover: it predates the rule
+        and has no involuntary confound of its own, so it is named here rather
+        than quietly excluded.
+        """
+
+        for channel in selectable_channels():
+            if channel.name == "mouth_open":
+                continue
+            self.assertIsNotNone(channel.gate, channel.name)
+            # A gate needs something to read besides the channel's own signal.
+            self.assertGreater(len(channel.required_features), 1, channel.name)
+
+
 class SelectableChannelTests(unittest.TestCase):
     def test_selectable_channels_are_stable_and_registered(self) -> None:
         names = [c.name for c in selectable_channels()]
         self.assertEqual(names, [c.name for c in selectable_channels()])
         for name in names:
             self.assertIn(name, CHANNELS)
+
+    def test_players_are_offered_the_phase_three_gestures(self) -> None:
+        names = [c.name for c in selectable_channels()]
+
+        self.assertEqual(
+            names,
+            ["mouth_open", "wink", "brow_raise", "smile_width", "jaw_lateral"],
+        )
 
 
 if __name__ == "__main__":

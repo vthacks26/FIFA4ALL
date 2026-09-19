@@ -212,6 +212,15 @@ def _mediapipe_points(landmarks: list[Any]) -> dict[str, Point]:
         "left_lower_eyelid": _xy(landmarks[145]),
         "right_upper_eyelid": _xy(landmarks[386]),
         "right_lower_eyelid": _xy(landmarks[374]),
+        # Optional points for the extra gesture channels. 105 and 334 sit at
+        # the middle of each eyebrow, directly above the eye landmarks already
+        # used, so the brow-to-eye gap is measured on one vertical. 61 and 291
+        # are the outer mouth corners and 152 is the chin tip on the midline.
+        "left_brow": _xy(landmarks[105]),
+        "right_brow": _xy(landmarks[334]),
+        "left_mouth_corner": _xy(landmarks[61]),
+        "right_mouth_corner": _xy(landmarks[291]),
+        "chin": _xy(landmarks[152]),
     }
 
 
