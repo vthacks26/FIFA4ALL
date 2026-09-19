@@ -21,6 +21,7 @@ import argparse
 import json
 import sys
 import threading
+import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from time import monotonic
 from typing import Any, Callable
@@ -32,6 +33,18 @@ from output.session import InputSession
 from tracking.controls import DIRECTION_KEYS
 
 DEFAULT_PORT = 8765
+
+# Only these origins may read bridge responses. The bridge binds to loopback,
+# but loopback includes every tab the user has open, so a wildcard would let any
+# page arm keyboard injection or read the webcam stream.
+ALLOWED_ORIGINS = frozenset(
+    {
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
+    }
+)
 
 
 class ControlHub:
@@ -88,6 +101,10 @@ class ControlHub:
                 if on_frame is not None:
                     on_frame(state)
         except Exception as exc:  # surfaced to the UI instead of dying silently
+            # Also print it: the capture loop ending stops the whole bridge, and
+            # an operator watching the console should not have to attach an SSE
+            # client to find out why it stopped.
+            traceback.print_exc()
             with self._lock:
                 self._error = f"{type(exc).__name__}: {exc}"
                 self._sequence += 1
@@ -130,7 +147,19 @@ class BridgeHandler(BaseHTTPRequestHandler):
         return  # keep the demo console readable
 
     def _cors(self) -> None:
-        self.send_header("Access-Control-Allow-Origin", "*")
+        """Echo the origin only when it is one we trust.
+
+        A request with no Origin header is same-origin or a direct client such
+        as curl, which the browser does not gate, so nothing is sent.
+        """
+
+        origin = self.headers.get("Origin")
+        if origin is None:
+            return
+        if origin not in ALLOWED_ORIGINS:
+            return
+        self.send_header("Access-Control-Allow-Origin", origin)
+        self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 
@@ -320,6 +349,7 @@ def _build_overlay(hub: ControlHub) -> "Callable[[dict[str, object]], None]":
     import cv2  # type: ignore[import-not-found]
 
     from bridge.overlay_view import draw_overlay
+    from output.focus import restore_game_focus
     from tracking.overlay import WINDOW_TITLE, decorate_overlay_window, poll_reset_click
 
     state_box: dict[str, bool] = {"decorated": False}
@@ -334,6 +364,9 @@ def _build_overlay(hub: ControlHub) -> "Callable[[dict[str, object]], None]":
         if not state_box["decorated"]:
             # Must happen after the first imshow, once the window exists.
             state_box["decorated"] = decorate_overlay_window(WINDOW_TITLE)
+            # Creating the window can take key focus even though the panel is
+            # non-activating, which would stop keys reaching the game.
+            restore_game_focus()
         if poll_reset_click():
             source.calibrate()
 
