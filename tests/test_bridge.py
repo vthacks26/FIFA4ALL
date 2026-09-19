@@ -32,8 +32,9 @@ class MockSourceTests(unittest.TestCase):
         frames = MockSource().frames()
         state, image = next(frames)
         self.assertIsNone(image, "mock source has no video")
-        self.assertEqual(
-            set(state), {"centered", "nose", "direction", "keys", "mouth", "wink", "tracking"}
+        self.assertLessEqual(
+            {"centered", "nose", "direction", "keys", "mouth", "wink", "tracking"},
+            set(state),
         )
 
     def test_override_drives_direction_and_keys(self) -> None:

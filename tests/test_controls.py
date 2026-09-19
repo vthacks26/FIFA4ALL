@@ -162,6 +162,68 @@ class ZoneHysteresisTests(unittest.TestCase):
         self.assertIn("angle_margin", ControlThresholds().as_dict())
 
 
+class DriftRecentreTests(unittest.TestCase):
+    """Posture settles over time; a held-still nose outside centre is drift."""
+
+    DRIFTED = at(0.0, -0.12)
+
+    def test_holding_still_off_centre_recentres(self) -> None:
+        state = machine()
+        state.update(nose=self.DRIFTED, features=NEUTRAL, tracking_valid=True, now=0.0)
+        result = state.update(nose=self.DRIFTED, features=NEUTRAL, tracking_valid=True, now=4.0)
+        self.assertTrue(result["recentred"])
+        self.assertTrue(result["centered"], "movement must stop once re-centred")
+
+    def test_does_not_recentre_before_the_window(self) -> None:
+        state = machine()
+        state.update(nose=self.DRIFTED, features=NEUTRAL, tracking_valid=True, now=0.0)
+        result = state.update(nose=self.DRIFTED, features=NEUTRAL, tracking_valid=True, now=2.0)
+        self.assertFalse(result["recentred"])
+        self.assertEqual(result["direction"], "N")
+
+    def test_steering_resets_the_stillness_window(self) -> None:
+        """A player actively steering keeps moving and must not be re-centred."""
+
+        state = machine()
+        for step in range(10):
+            # Nudge the nose each frame, as a steering hand would.
+            nose = at(0.0, -0.12 - step * 0.004)
+            result = state.update(nose=nose, features=NEUTRAL, tracking_valid=True, now=step * 0.6)
+            self.assertFalse(result["recentred"], f"steering re-centred at step {step}")
+
+    def test_centred_nose_never_recentres(self) -> None:
+        state = machine()
+        state.update(nose=CENTER, features=NEUTRAL, tracking_valid=True, now=0.0)
+        result = state.update(nose=CENTER, features=NEUTRAL, tracking_valid=True, now=9.0)
+        self.assertFalse(result["recentred"])
+
+    def test_tracking_loss_resets_the_stillness_window(self) -> None:
+        state = machine()
+        state.update(nose=self.DRIFTED, features=NEUTRAL, tracking_valid=True, now=0.0)
+        state.update(nose=None, features={}, tracking_valid=False, now=1.0)
+        result = state.update(nose=self.DRIFTED, features=NEUTRAL, tracking_valid=True, now=4.0)
+        self.assertFalse(result["recentred"], "the window must restart after a dropout")
+
+    def test_auto_recentre_can_be_disabled(self) -> None:
+        state = machine()
+        state.auto_recentre = False
+        state.update(nose=self.DRIFTED, features=NEUTRAL, tracking_valid=True, now=0.0)
+        result = state.update(nose=self.DRIFTED, features=NEUTRAL, tracking_valid=True, now=9.0)
+        self.assertFalse(result["recentred"])
+        self.assertEqual(result["direction"], "N")
+
+    def test_recentred_flag_is_only_true_on_the_frame_it_happens(self) -> None:
+        state = machine()
+        state.update(nose=self.DRIFTED, features=NEUTRAL, tracking_valid=True, now=0.0)
+        state.update(nose=self.DRIFTED, features=NEUTRAL, tracking_valid=True, now=4.0)
+        after = state.update(nose=self.DRIFTED, features=NEUTRAL, tracking_valid=True, now=4.1)
+        self.assertFalse(after["recentred"])
+
+    def test_thresholds_reject_a_non_positive_window(self) -> None:
+        with self.assertRaises(ValueError):
+            ControlThresholds(recentre_seconds=0.0)
+
+
 class MouthEdgeTriggerTests(unittest.TestCase):
     def test_crossing_the_threshold_fires_once(self) -> None:
         state = machine()
@@ -190,6 +252,88 @@ class MouthEdgeTriggerTests(unittest.TestCase):
         held = state.update(nose=CENTER, features={**NEUTRAL, "mouth_opening": between}, tracking_valid=True)
         self.assertTrue(held["mouth"]["active"])
         self.assertFalse(held["mouth"]["fired"])
+
+
+class RestingMouthCalibrationTests(unittest.TestCase):
+    """A resting mouth does not read zero, and must still clear the latch."""
+
+    def test_defaults_are_unchanged_without_calibration(self) -> None:
+        self.assertEqual(machine().mouth_thresholds, (0.09, 0.06))
+
+    def test_a_high_resting_mouth_raises_the_release_threshold(self) -> None:
+        state = machine()
+        state.calibrate(CENTER, mouth_rest=0.064)
+        _, reset = state.mouth_thresholds
+        self.assertGreater(reset, 0.064, "resting must fall below the release point")
+
+    def test_resting_value_releases_the_latch_after_calibration(self) -> None:
+        state = machine()
+        state.calibrate(CENTER, mouth_rest=0.064)
+        state.update(
+            nose=CENTER, features={"mouth_opening": 0.2, "left_wink": 0.0},
+            tracking_valid=True, now=0.0,
+        )
+        result = state.update(
+            nose=CENTER, features={"mouth_opening": 0.064, "left_wink": 0.0},
+            tracking_valid=True, now=0.5,
+        )
+        self.assertFalse(result["mouth"]["active"], "Space would stick open in game")
+
+    def test_a_low_resting_mouth_keeps_the_tuned_thresholds(self) -> None:
+        state = machine()
+        state.calibrate(CENTER, mouth_rest=0.01)
+        self.assertEqual(state.mouth_thresholds, (0.09, 0.06))
+
+    def test_open_always_stays_above_reset(self) -> None:
+        for rest in (0.0, 0.05, 0.1, 0.3):
+            with self.subTest(rest=rest):
+                state = machine()
+                state.calibrate(CENTER, mouth_rest=rest)
+                open_value, reset = state.mouth_thresholds
+                self.assertGreater(open_value, reset)
+
+    def test_calibrating_without_a_mouth_sample_leaves_thresholds_alone(self) -> None:
+        state = machine()
+        state.calibrate(CENTER)
+        self.assertEqual(state.mouth_thresholds, (0.09, 0.06))
+
+
+class GestureDurationTests(unittest.TestCase):
+    """Shot power comes from how long the mouth stays open."""
+
+    OPEN = {"mouth_opening": 0.2, "left_wink": 0.0}
+
+    def test_hold_duration_accumulates_while_the_mouth_is_open(self) -> None:
+        state = machine()
+        state.update(nose=CENTER, features=self.OPEN, tracking_valid=True, now=10.0)
+        result = state.update(nose=CENTER, features=self.OPEN, tracking_valid=True, now=10.8)
+        self.assertAlmostEqual(result["mouth"]["held_seconds"], 0.8, places=2)
+
+    def test_hold_duration_is_zero_when_closed(self) -> None:
+        state = machine()
+        result = state.update(nose=CENTER, features=NEUTRAL, tracking_valid=True, now=1.0)
+        self.assertEqual(result["mouth"]["held_seconds"], 0.0)
+
+    def test_hold_duration_resets_after_release(self) -> None:
+        state = machine()
+        state.update(nose=CENTER, features=self.OPEN, tracking_valid=True, now=0.0)
+        state.update(nose=CENTER, features=self.OPEN, tracking_valid=True, now=1.0)
+        result = state.update(nose=CENTER, features=NEUTRAL, tracking_valid=True, now=1.1)
+        self.assertEqual(result["mouth"]["held_seconds"], 0.0)
+
+    def test_duration_is_reported_regardless_of_input_arming(self) -> None:
+        """The UI must show real gesture timing even with output disarmed."""
+
+        state = machine()
+        state.update(nose=CENTER, features=self.OPEN, tracking_valid=True, now=0.0)
+        result = state.update(nose=CENTER, features=self.OPEN, tracking_valid=True, now=0.5)
+        self.assertGreater(result["mouth"]["held_seconds"], 0.0)
+
+    def test_tracking_loss_clears_the_duration(self) -> None:
+        state = machine()
+        state.update(nose=CENTER, features=self.OPEN, tracking_valid=True, now=0.0)
+        result = state.update(nose=None, features={}, tracking_valid=False, now=1.0)
+        self.assertEqual(result["mouth"]["held_seconds"], 0.0)
 
 
 class WinkEdgeTriggerTests(unittest.TestCase):
@@ -231,12 +375,16 @@ class TrackingLossTests(unittest.TestCase):
 
 
 class StateContractTests(unittest.TestCase):
-    def test_state_matches_the_documented_contract_keys(self) -> None:
+    def test_state_contains_the_documented_contract_keys(self) -> None:
         state = machine().update(nose=CENTER, features=NEUTRAL, tracking_valid=True)
-        self.assertEqual(
-            set(state),
+        self.assertLessEqual(
             {"centered", "nose", "direction", "keys", "mouth", "wink", "tracking"},
+            set(state),
         )
+
+    def test_state_reports_whether_it_re_centred_this_frame(self) -> None:
+        state = machine().update(nose=CENTER, features=NEUTRAL, tracking_valid=True)
+        self.assertIn("recentred", state)
 
     def test_confidence_is_clamped_to_unit_range(self) -> None:
         state = machine().update(

@@ -33,6 +33,8 @@ export interface ControlChannel {
   readonly useMock: boolean;
   readonly setUseMock: (next: boolean) => void;
   readonly calibrate: () => void;
+  /** Start or stop sending real key events to the focused application. */
+  readonly setArmed: (next: boolean) => void;
 }
 
 export function useControlState(): ControlChannel {
@@ -117,6 +119,29 @@ export function useControlState(): ControlChannel {
     });
   }, [useMock]);
 
+  const setArmed = useCallback(
+    (next: boolean) => {
+      if (useMock) return;
+      void fetch(`${BRIDGE_URL}/${next ? "arm" : "disarm"}`, { method: "POST" })
+        .then(async (response) => {
+          if (response.ok) {
+            setError(null);
+            return;
+          }
+          // The bridge refuses to arm when macOS would discard the keys, and
+          // explains how to fix it. Surface that verbatim.
+          const body: unknown = await response.json();
+          const reason =
+            typeof body === "object" && body !== null && "error" in body
+              ? String((body as { error: unknown }).error)
+              : "could not change input state";
+          setError(reason);
+        })
+        .catch(() => setError("could not reach the bridge to change input state"));
+    },
+    [useMock],
+  );
+
   return {
     state,
     config: useMock ? MOCK_CONFIG : config,
@@ -127,6 +152,7 @@ export function useControlState(): ControlChannel {
     useMock,
     setUseMock,
     calibrate,
+    setArmed,
   };
 }
 

@@ -11,6 +11,8 @@ export interface ExpressionState {
   readonly value: number | null;
   /** Progress toward the trigger threshold, clamped to [0, 1]. */
   readonly confidence: number;
+  /** How long the gesture has been held. Shot power comes from this. */
+  readonly held_seconds?: number;
 }
 
 export interface ControlState {
@@ -21,12 +23,27 @@ export interface ControlState {
   readonly mouth: ExpressionState;
   readonly wink: ExpressionState;
   readonly tracking: boolean;
+  /** True only on the frame neutral was re-established after posture drift. */
+  readonly recentred?: boolean;
+  /** Present once the bridge is running; absent in pure mock mode. */
+  readonly armed?: boolean;
+  /** Keys the output layer is physically holding right now. */
+  readonly held_keys?: readonly string[];
+  /** How long the mouth has been open, which is shot power. */
+  readonly shot_seconds?: number;
+  /** Name of the app that currently owns the keyboard. */
+  readonly frontmost?: string | null;
+  /** True when a browser is frontmost and could be receiving the keys. */
+  readonly game_focus?: boolean;
 }
 
 export interface Thresholds {
   readonly enter_radius: number;
   readonly exit_radius: number;
   readonly y_scale: number;
+  readonly angle_margin: number;
+  readonly recentre_seconds: number;
+  readonly recentre_stillness: number;
   readonly mouth_open: number;
   readonly mouth_reset: number;
   readonly wink_on: number;
@@ -38,6 +55,8 @@ export interface BridgeConfig {
   readonly thresholds: Thresholds;
   readonly direction_keys: Readonly<Record<Direction, readonly MovementKey[]>>;
   readonly has_video: boolean;
+  /** Why keyboard output cannot work, or null when it can. */
+  readonly keyboard_problem?: string | null;
 }
 
 /** Orientation phases, in the order defined by TECHNICAL_SPEC.md. */
@@ -78,9 +97,15 @@ export const DEFAULT_THRESHOLDS: Thresholds = {
   enter_radius: 0.045,
   exit_radius: 0.062,
   y_scale: 1.15,
+  angle_margin: 9.0,
+  recentre_seconds: 3.5,
+  recentre_stillness: 0.012,
   mouth_open: 0.09,
   mouth_reset: 0.06,
   wink_on: 0.025,
   wink_off: 0.015,
   dwell_seconds: 1.0,
 };
+
+/** Mouth-open duration that counts as a full-power shot, in seconds. */
+export const FULL_SHOT_SECONDS = 1.25;

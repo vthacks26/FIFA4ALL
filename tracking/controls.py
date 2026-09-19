@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from math import atan2, degrees, hypot
+from time import monotonic
 from typing import Literal, Mapping
 
 Direction = Literal["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
@@ -51,8 +52,22 @@ class ControlThresholds:
     # over. Without this the nose resting on a boundary flaps between, say, N
     # and NE, which stutters movement in game.
     angle_margin: float = 9.0
+    # Posture settles over a few minutes, the calibrated centre moves with it,
+    # and the player walks with no input. If the nose holds still outside the
+    # dead zone for this long it is drift, not intent, so re-centre there.
+    # Deliberately longer than a steering input is ever held dead still.
+    recentre_seconds: float = 3.5
+    # How far the nose may wander and still count as held still.
+    recentre_stillness: float = 0.012
     mouth_open: float = 0.090
     mouth_reset: float = 0.060
+    # A resting mouth does not read zero, and how high it reads varies by face.
+    # Measured at 0.064 on one tester, above the 0.060 release threshold, which
+    # latches Space open forever once triggered. Calibration samples the resting
+    # value and lifts the release just above it. These only ever raise the
+    # thresholds, so a face that rests low keeps the team's tuned values.
+    mouth_rest_clearance: float = 0.008
+    mouth_min_gap: float = 0.030
     wink_on: float = 0.025
     wink_off: float = 0.015
     dwell_seconds: float = 1.0
@@ -64,12 +79,20 @@ class ControlThresholds:
             raise ValueError("exit_radius must be larger than enter_radius")
         if self.mouth_reset >= self.mouth_open:
             raise ValueError("mouth_reset must be below mouth_open")
+        if self.mouth_rest_clearance <= 0:
+            raise ValueError("mouth_rest_clearance must be positive")
+        if self.mouth_min_gap <= 0:
+            raise ValueError("mouth_min_gap must be positive")
         if self.wink_off >= self.wink_on:
             raise ValueError("wink_off must be below wink_on")
         if self.y_scale <= 0:
             raise ValueError("y_scale must be positive")
         if not 0.0 <= self.angle_margin < 22.5:
             raise ValueError("angle_margin must be within half a zone")
+        if self.recentre_seconds <= 0:
+            raise ValueError("recentre_seconds must be positive")
+        if self.recentre_stillness <= 0:
+            raise ValueError("recentre_stillness must be positive")
 
     def as_dict(self) -> dict[str, float]:
         """Publish thresholds to the UI so it can draw truthful zones."""
@@ -79,8 +102,12 @@ class ControlThresholds:
             "exit_radius": self.exit_radius,
             "y_scale": self.y_scale,
             "angle_margin": self.angle_margin,
+            "recentre_seconds": self.recentre_seconds,
+            "recentre_stillness": self.recentre_stillness,
             "mouth_open": self.mouth_open,
             "mouth_reset": self.mouth_reset,
+            "mouth_rest_clearance": self.mouth_rest_clearance,
+            "mouth_min_gap": self.mouth_min_gap,
             "wink_on": self.wink_on,
             "wink_off": self.wink_off,
             "dwell_seconds": self.dwell_seconds,
@@ -102,26 +129,38 @@ def classify_direction(offset: tuple[float, float]) -> Direction:
 
 @dataclass
 class _EdgeTrigger:
-    """Rising-edge detector with a latch and a separate reset threshold."""
+    """Rising-edge detector with a latch and a separate reset threshold.
+
+    Also tracks how long the latch has been engaged, which is what shot power
+    is derived from. Measuring it here rather than in the output layer means
+    the UI shows a truthful gesture duration whether or not input is armed.
+    """
 
     on_value: float
     off_value: float
     latched: bool = False
+    _since: float | None = None
 
-    def update(self, value: float | None) -> tuple[bool, bool]:
+    def update(self, value: float | None, now: float) -> tuple[bool, bool]:
         """Return (active, fired). `fired` is True only on the rising edge."""
 
         if value is None:
             self.latched = False
+            self._since = None
             return (False, False)
         if self.latched:
             if value <= self.off_value:
                 self.latched = False
+                self._since = None
             return (self.latched, False)
         if value >= self.on_value:
             self.latched = True
+            self._since = now
             return (True, True)
         return (False, False)
+
+    def held_seconds(self, now: float) -> float:
+        return 0.0 if self._since is None else max(now - self._since, 0.0)
 
 
 @dataclass
@@ -130,8 +169,13 @@ class ControlStateMachine:
 
     thresholds: ControlThresholds = field(default_factory=ControlThresholds)
     center: tuple[float, float] | None = None
+    mouth_rest: float | None = None
+    auto_recentre: bool = True
+    recentred: bool = False
     _moving: bool = False
     _direction: Direction | None = None
+    _still_since: float | None = None
+    _still_anchor: tuple[float, float] | None = None
     _mouth: _EdgeTrigger = field(init=False)
     _wink: _EdgeTrigger = field(init=False)
 
@@ -139,12 +183,24 @@ class ControlStateMachine:
         self._mouth = _EdgeTrigger(self.thresholds.mouth_open, self.thresholds.mouth_reset)
         self._wink = _EdgeTrigger(self.thresholds.wink_on, self.thresholds.wink_off)
 
-    def calibrate(self, nose: tuple[float, float] | None) -> None:
-        """Set the neutral center. Passing None clears calibration."""
+    def calibrate(
+        self, nose: tuple[float, float] | None, *, mouth_rest: float | None = None
+    ) -> None:
+        """Set the neutral centre, and optionally the resting mouth baseline.
+
+        `mouth_rest` is the mouth-opening ratio measured while the user sits
+        neutral. It raises the release threshold clear of that value so the
+        shoot latch cannot stick open.
+        """
 
         self.center = nose
+        if mouth_rest is not None:
+            self.mouth_rest = mouth_rest
+            self._apply_mouth_thresholds()
         self._moving = False
         self._direction = None
+        self._still_since = None
+        self._still_anchor = None
 
     def update(
         self,
@@ -152,6 +208,7 @@ class ControlStateMachine:
         nose: tuple[float, float] | None,
         features: Mapping[str, float],
         tracking_valid: bool,
+        now: float | None = None,
     ) -> dict[str, object]:
         """Compute the control state for one frame.
 
@@ -159,11 +216,16 @@ class ControlStateMachine:
         game never keeps a key held down after the face disappears.
         """
 
+        moment = monotonic() if now is None else now
+        self.recentred = False
+
         if not tracking_valid or nose is None:
             self._moving = False
             self._direction = None
-            self._mouth.update(None)
-            self._wink.update(None)
+            self._still_since = None
+            self._still_anchor = None
+            self._mouth.update(None, moment)
+            self._wink.update(None, moment)
             return self._state(
                 offset=(0.0, 0.0),
                 mouth_value=None,
@@ -171,6 +233,7 @@ class ControlStateMachine:
                 mouth_fired=False,
                 wink_fired=False,
                 tracking=False,
+                now=moment,
             )
 
         if self.center is None:
@@ -178,11 +241,18 @@ class ControlStateMachine:
 
         offset = (nose[0] - self.center[0], nose[1] - self.center[1])
         self._update_movement(offset)
+        if self.auto_recentre and self._drifted(nose, moment):
+            self.center = nose
+            self.recentred = True
+            self._still_since = None
+            self._still_anchor = None
+            offset = (0.0, 0.0)
+            self._update_movement(offset)
 
         mouth_value = features.get("mouth_opening")
         wink_value = features.get("left_wink")
-        _, mouth_fired = self._mouth.update(mouth_value)
-        _, wink_fired = self._wink.update(wink_value)
+        _, mouth_fired = self._mouth.update(mouth_value, moment)
+        _, wink_fired = self._wink.update(wink_value, moment)
 
         return self._state(
             offset=offset,
@@ -191,6 +261,7 @@ class ControlStateMachine:
             mouth_fired=mouth_fired,
             wink_fired=wink_fired,
             tracking=True,
+            now=moment,
         )
 
     def _update_movement(self, offset: tuple[float, float]) -> None:
@@ -211,6 +282,44 @@ class ControlStateMachine:
         self._moving = True
         self._direction = candidate
 
+    def _apply_mouth_thresholds(self) -> None:
+        """Lift the mouth thresholds clear of this person's resting value."""
+
+        rest = self.mouth_rest
+        if rest is None:
+            return
+        reset = max(self.thresholds.mouth_reset, rest + self.thresholds.mouth_rest_clearance)
+        self._mouth.off_value = reset
+        self._mouth.on_value = max(self.thresholds.mouth_open, reset + self.thresholds.mouth_min_gap)
+
+    @property
+    def mouth_thresholds(self) -> tuple[float, float]:
+        """Effective (open, reset) after any resting-mouth calibration."""
+
+        return (self._mouth.on_value, self._mouth.off_value)
+
+    def _drifted(self, nose: tuple[float, float], now: float) -> bool:
+        """True when the nose has been held still outside the dead zone.
+
+        Holding still while the system reports movement can only mean the
+        neutral centre has drifted away from where the user actually rests.
+        """
+
+        if self._direction is None:
+            # Already neutral, so there is nothing to correct.
+            self._still_since = None
+            self._still_anchor = None
+            return False
+
+        anchor = self._still_anchor
+        if anchor is None or hypot(nose[0] - anchor[0], nose[1] - anchor[1]) > self.thresholds.recentre_stillness:
+            self._still_anchor = nose
+            self._still_since = now
+            return False
+
+        started = self._still_since
+        return started is not None and now - started >= self.thresholds.recentre_seconds
+
     def _state(
         self,
         *,
@@ -220,6 +329,7 @@ class ControlStateMachine:
         mouth_fired: bool,
         wink_fired: bool,
         tracking: bool,
+        now: float,
     ) -> dict[str, object]:
         direction = self._direction
         keys = list(DIRECTION_KEYS[direction]) if direction is not None else []
@@ -232,15 +342,18 @@ class ControlStateMachine:
                 "active": self._mouth.latched,
                 "fired": mouth_fired,
                 "value": mouth_value,
-                "confidence": _confidence(mouth_value, self.thresholds.mouth_open),
+                "confidence": _confidence(mouth_value, self._mouth.on_value),
+                "held_seconds": round(self._mouth.held_seconds(now), 3),
             },
             "wink": {
                 "active": self._wink.latched,
                 "fired": wink_fired,
                 "value": wink_value,
                 "confidence": _confidence(wink_value, self.thresholds.wink_on),
+                "held_seconds": round(self._wink.held_seconds(now), 3),
             },
             "tracking": tracking,
+            "recentred": self.recentred,
         }
 
 

@@ -6,11 +6,14 @@
  * carries only the four things that prove the face is driving the game.
  */
 
+import { useEffect, useState } from "react";
+
 import { CameraFrame } from "../components/CameraFrame";
 import { ConfidenceBar } from "../components/ConfidenceBar";
 import { Logo } from "../components/Logo";
+import { MatchStatus } from "../components/MatchStatus";
 import type { ControlChannel } from "../control/useControlState";
-import type { MovementKey } from "../types";
+import { FULL_SHOT_SECONDS, type MovementKey } from "../types";
 import "./Live.css";
 
 const KEY_ROWS: ReadonlyArray<readonly MovementKey[]> = [["W"], ["A", "S", "D"]];
@@ -21,8 +24,12 @@ interface LiveProps {
 }
 
 export function Live({ channel, onRestart }: LiveProps) {
-  const { state, config, status } = channel;
+  const { state, config, status, setArmed, useMock } = channel;
   const confidence = state.tracking ? 96 : 0;
+  // Shot power is how long the mouth has stayed open, capped for display.
+  const heldSeconds = state.mouth.held_seconds ?? 0;
+  const shotPower = Math.min(heldSeconds / FULL_SHOT_SECONDS, 1);
+  const recentred = useRecentreNotice(state.recentred === true);
 
   return (
     <section className="screen live">
@@ -33,7 +40,12 @@ export function Live({ channel, onRestart }: LiveProps) {
           <Logo size={30} />
           <span className="live__badge">LIVE</span>
         </div>
-        <p className="live__sub">Your controls are active.</p>
+        <MatchStatus
+          state={state}
+          onArm={setArmed}
+          keyboardProblem={config.keyboard_problem}
+          disabled={useMock}
+        />
       </header>
 
       <div className="live__stage">
@@ -76,15 +88,15 @@ export function Live({ channel, onRestart }: LiveProps) {
             </div>
             <div className="live-row__body">
               <strong className="live-row__value">
-                {state.mouth.active ? "FIRING" : "READY"}
+                {state.mouth.active ? `CHARGING ${heldSeconds.toFixed(1)}s` : "READY"}
               </strong>
               <span className={`keycap keycap--wide ${state.mouth.active ? "is-down" : ""}`}>
                 Space
               </span>
             </div>
             <ConfidenceBar
-              label="Mouth"
-              value={state.mouth.confidence}
+              label={state.mouth.active ? "Shot power" : "Mouth"}
+              value={state.mouth.active ? shotPower : state.mouth.confidence}
               active={state.mouth.active}
               tone="amber"
             />
@@ -109,6 +121,8 @@ export function Live({ channel, onRestart }: LiveProps) {
         </div>
       </div>
 
+      {recentred && <div className="live__toast">Neutral re-centred</div>}
+
       <footer className="live__footer">
         <div className="live__confidence">
           <ConfidenceBar
@@ -124,4 +138,22 @@ export function Live({ channel, onRestart }: LiveProps) {
       </footer>
     </section>
   );
+}
+
+/**
+ * Hold a re-centre notice on screen briefly.
+ *
+ * The bridge reports it for a single frame, which at 30fps is invisible.
+ */
+function useRecentreNotice(fired: boolean): boolean {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (!fired) return;
+    setVisible(true);
+    const timer = window.setTimeout(() => setVisible(false), 1800);
+    return () => window.clearTimeout(timer);
+  }, [fired]);
+
+  return visible;
 }

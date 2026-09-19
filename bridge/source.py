@@ -138,15 +138,17 @@ class WebcamSource(ControlSource):
 
         for tracked in self._tracker.tracked_frames():
             nose = self._nose(tracked.landmarks)
-            if self._recalibrate and nose is not None:
-                self.machine.calibrate(nose)
-                self._recalibrate = False
-
             values = {
                 name: feature.value
                 for name, feature in tracked.movement.features.items()
                 if feature.available and feature.value is not None
             }
+
+            if self._recalibrate and nose is not None:
+                # Sample the resting mouth at the same moment as neutral, so the
+                # shoot latch releases reliably for this particular face.
+                self.machine.calibrate(nose, mouth_rest=values.get("mouth_opening"))
+                self._recalibrate = False
             state = self.machine.update(
                 nose=nose,
                 features=values,
