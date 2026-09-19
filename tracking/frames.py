@@ -54,9 +54,15 @@ FEATURE_UNITS: Mapping[str, str] = {
     "mouth_opening": "ratio",
     "head_turn": "normalized_x_offset",
     "head_tilt": "degrees",
+    "head_pitch": "normalized_y_offset",
     "left_wink": "ratio_delta",
     "left_eye_opening": "ratio",
     "right_eye_opening": "ratio",
+    "brow_raise": "ratio",
+    "mouth_width": "ratio",
+    "mouth_pucker": "ratio",
+    "jaw_lateral": "normalized_x_offset",
+    "cheek_span_ratio": "ratio",
 }
 
 FEATURE_DOCUMENTATION = {
@@ -93,5 +99,64 @@ FEATURE_DOCUMENTATION = {
     "right_eye_opening": (
         "Right eyelid gap divided by face width. Same scale and caveats as "
         "left_eye_opening."
+    ),
+    "head_pitch": (
+        "Vertical nose-tip offset below the eye line, divided by face width. "
+        "Larger values mean the chin has dropped toward the chest; smaller "
+        "values mean the chin has come up. The nose protrudes toward the "
+        "camera, so pitch rotates that protrusion into or out of the image "
+        "plane, which is what moves this number. It is a proxy, not an angle, "
+        "and it cannot tell pitch apart from the user sliding up or down in "
+        "their seat far enough to change the camera's viewing angle. Roll "
+        "shrinks it by cos(roll) as well."
+    ),
+    "brow_raise": (
+        "Mean brow-to-eye vertical gap divided by face width, averaged over "
+        "the two sides. Larger values mean the brows are raised. Resting is "
+        "around 0.18 but varies enough between faces, and with brow shape and "
+        "glasses frames, that it must be compared against a value measured "
+        "for this user. Roll shrinks it by cos(roll) because the gap is "
+        "measured along image y, and head pitch moves it by several percent "
+        "in its own right, which is why the brow_raise channel is gated on "
+        "head_pitch."
+    ),
+    "mouth_width": (
+        "Distance between the mouth corners divided by face width. Resting is "
+        "around 0.46 on a relaxed face; a broad smile adds roughly 15%. "
+        "Head yaw foreshortens the corner separation faster than it "
+        "foreshortens the cheek span used to normalize it, so a turned head "
+        "reads narrower than it is. That direction only loses smiles, it does "
+        "not invent them. A jaw drop narrows this measurement slightly, so a "
+        "wide open mouth is not a smile."
+    ),
+    "mouth_pucker": (
+        "Lip gap divided by mouth-corner separation: the aspect ratio of the "
+        "mouth aperture. Face width cancels out of both terms, so this is "
+        "scale-free on its own. A closed resting mouth reads near 0.03 and a "
+        "round 'O' reads around 0.20. It cannot on its own separate a pucker "
+        "from a small jaw drop, because both raise the ratio: a jaw drop "
+        "raises the numerator while a pucker shrinks the denominator. Lip "
+        "protrusion, which is what actually distinguishes the two, is "
+        "out-of-plane motion and is not observable in these 2D landmarks."
+    ),
+    "jaw_lateral": (
+        "Chin offset from the nose tip, projected onto the eye line and "
+        "divided by face width. Positive values mean the chin slid toward the "
+        "user's right in the camera image. Near 0.00 at rest; a comfortable "
+        "lateral excursion is roughly 0.07. Projecting onto the eye line "
+        "rather than image x removes head roll, since both landmarks sit on "
+        "the facial midline and swing together under roll. Head yaw is not "
+        "removed: the chin is further from the axis of rotation than the nose "
+        "tip, so a turn leaves a residual offset in the same direction as the "
+        "turn, which is why the jaw_lateral channel is gated on head_turn."
+    ),
+    "cheek_span_ratio": (
+        "Cheek-to-cheek distance divided by the inter-eye distance. Around "
+        "2.05, varying with face shape. Face width cannot normalize a cheek "
+        "measurement because face width is that measurement, so the eye "
+        "corners are used as the reference instead. A cheek puff is mostly "
+        "out-of-plane bulge, so it moves this number by only a percent or "
+        "two, comparable to the shift head yaw produces. Treat it as a weak "
+        "diagnostic, not a trigger."
     ),
 }

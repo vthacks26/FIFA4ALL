@@ -14,12 +14,23 @@ Once `shared.MovementFrame` is published, adapt the boundary in one place instea
 
 ## Features
 
-| Feature | Unit | Sign and meaning | Limitations |
-| --- | --- | --- | --- |
-| `mouth_opening` | `ratio` | Vertical upper-lip to lower-lip distance divided by cheek-to-cheek face width. Larger positive values mean a more open mouth. | Sensitive to lip occlusion, facial hair, facial expression, and large head turns. |
-| `head_turn` | `normalized_x_offset` | Nose-tip x offset from cheek midpoint divided by face width. Positive means the nose moved toward the user's right in the camera image. | Coarse 2D proxy, not true yaw. Camera angle and face shape affect values. |
-| `head_tilt` | `degrees` | Eye-line angle. Positive means the user's right eye appears lower in the camera image. | Assumes the camera is roughly level. Glasses, hair, and occlusion can affect landmarks. |
-| `left_wink` | `ratio_delta` | Right-eye openness minus left-eye openness, normalized by face width. Larger positive values mean the user's left eye appears more closed than the right. | Rough diagnostic only. Sensitive to glasses, shadows, eye shape, camera angle, and partial occlusion. |
+| Feature            | Unit                  | Sign and meaning                                                                                                                                          | Limitations                                                                                                                                           |
+| ------------------ | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mouth_opening`    | `ratio`               | Vertical upper-lip to lower-lip distance divided by cheek-to-cheek face width. Larger positive values mean a more open mouth.                             | Sensitive to lip occlusion, facial hair, facial expression, and large head turns.                                                                     |
+| `head_turn`        | `normalized_x_offset` | Nose-tip x offset from cheek midpoint divided by face width. Positive means the nose moved toward the user's right in the camera image.                   | Coarse 2D proxy, not true yaw. Camera angle and face shape affect values.                                                                             |
+| `head_tilt`        | `degrees`             | Eye-line angle. Positive means the user's right eye appears lower in the camera image.                                                                    | Assumes the camera is roughly level. Glasses, hair, and occlusion can affect landmarks.                                                               |
+| `left_wink`        | `ratio_delta`         | Right-eye openness minus left-eye openness, normalized by face width. Larger positive values mean the user's left eye appears more closed than the right. | Rough diagnostic only. Sensitive to glasses, shadows, eye shape, camera angle, and partial occlusion.                                                 |
+| `head_pitch`       | `normalized_y_offset` | Nose-tip y offset below the eye line divided by face width. Larger means the chin dropped toward the chest.                                               | Proxy, not an angle. Moves if the user slides up or down in their seat. Shrinks by cos(roll).                                                         |
+| `brow_raise`       | `ratio`               | Mean brow-to-eye vertical gap divided by face width, averaged over both sides. Larger means the brows are raised.                                         | Resting value varies with brow shape and glasses frames, so it must be compared against a per-user sample. Head pitch moves it by several percent.    |
+| `mouth_width`      | `ratio`               | Mouth-corner separation divided by face width. Larger means a wider smile.                                                                                | Head yaw makes it read narrower than it is, which loses smiles but cannot invent one. A jaw drop narrows it slightly.                                 |
+| `mouth_pucker`     | `ratio`               | Lip gap divided by mouth-corner separation: the aperture's aspect ratio. Larger means a rounder "O".                                                      | Cannot separate a pucker from a small jaw drop; both raise it, from opposite ends of the fraction. Lip protrusion is out-of-plane and invisible here. |
+| `jaw_lateral`      | `normalized_x_offset` | Chin offset from the nose tip projected onto the eye line, divided by face width. Positive means the chin slid toward the user's right in the image.      | Head roll cancels by construction; head yaw does not, and leaves a residual offset in the direction of the turn.                                      |
+| `cheek_span_ratio` | `ratio`               | Cheek-to-cheek distance divided by inter-eye distance.                                                                                                    | A cheek puff moves it by only a percent or two, about what head yaw moves it. Weak diagnostic, not a trigger.                                         |
+
+The three optional landmark groups behind `brow_raise`, the mouth-corner
+features, and `jaw_lateral` are not required: a tracker that does not emit
+them yields `available=False` for those features and a valid frame for the
+rest.
 
 Do not equate landmark confidence with gesture reliability. Calibration must still ask the user what is comfortable.
 

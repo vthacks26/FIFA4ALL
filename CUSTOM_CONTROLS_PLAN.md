@@ -50,13 +50,24 @@ gesture is also rejected if it fires during the rest test in Phase 4.
 
 Each channel below is a separate task and must satisfy the eligibility rule.
 
-- [ ] `brow_raise` - brow-to-eye distance, normalized by face width
-- [ ] `cheek_puff`
-- [ ] `smile_width` - mouth corner separation
-- [ ] `jaw_lateral` - jaw slide left/right
-- [ ] `mouth_pucker` - the EyeCraft "O", distinct from mouth_open
+- [x] `brow_raise` - brow-to-eye distance, normalized by face width.
+      Gated on `head_pitch`: nodding is the N/S steering axis, and pitch moves
+      the brow gap by several percent of itself.
+- [x] `cheek_puff` - registered **not selectable**. The bulge is out of plane,
+      so the 2D landmarks see one or two percent, less than head yaw moves the
+      same measurement. No gate can separate them; revisit with blendshapes.
+- [x] `smile_width` - mouth corner separation. Gated on `mouth_opening` near
+      rest, which rejects the yawn and stops it co-firing with `mouth_open`.
+- [x] `jaw_lateral` - jaw slide left/right, measured chin-against-nose and
+      projected onto the eye line so head roll cancels. Gated on `head_turn`
+      for the yaw residual.
+- [x] `mouth_pucker` - registered **not selectable**. It is lip gap over
+      corner separation, so a jaw drop raises it harder than a pucker does and
+      it would fire on every shot. Protrusion is not visible in 2D.
 - [ ] Per-channel rest calibration folded into the existing calibrate step
-- [ ] Tests per channel: rest baseline, trigger, release, confound gate
+      (needs `tracking/controls.py`, which also owns the new gate names
+      `head_level`, `mouth_near_rest` and `facing_forward`)
+- [x] Tests per channel: rest baseline, trigger, release, confound gate
 
 ## Phase 4 - Adaptive rebind
 
