@@ -219,6 +219,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         if self.path.startswith("/calibrate"):
+            # Same ControlSource the Quartz injector is already reading.
             self.hub.source.calibrate()
             self._send_json({"ok": True})
         elif self.path.startswith("/arm"):
@@ -448,6 +449,7 @@ def run_product(
     finally:
         hub.stop()
         server.shutdown()
+        server.server_close()
     return 0
 
 

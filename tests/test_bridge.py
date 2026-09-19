@@ -115,6 +115,29 @@ class BridgeServerTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(body["ok"])
 
+    def test_site_calibrate_is_the_same_session_as_injected_keys(self) -> None:
+        """POST /calibrate recentres the tracker that InputSession injects."""
+
+        self.hub.session.arm()
+        try:
+            self.reset_center()
+            post(
+                self.url("/mock"),
+                {"tracking": True, "nose": {"x": 0.12, "y": 0.0}, "mouth": 0.0, "wink": 0.0},
+            )
+            state = self.read_one_event()
+            self.assertEqual(state["keys"], ["D"])
+            self.assertIn("D", self.keyboard.held)
+
+            post(self.url("/calibrate"))
+            state = self.read_one_event()
+            self.assertEqual(state["keys"], [])
+            self.assertTrue(state["centered"])
+            self.assertEqual(self.keyboard.held, set())
+        finally:
+            self.hub.session.disarm()
+            self.keyboard.reset()
+
     def test_mock_endpoint_updates_the_streamed_state(self) -> None:
         self.reset_center()
         status, _ = post(
@@ -236,7 +259,8 @@ class OrientationLaunchTests(unittest.TestCase):
 
         with patch("bridge.server.webbrowser.open", return_value=True) as opened:
             with patch.object(ControlHub, "run", return_value=None):
-                code = run_product(preview=True, mock=True, port=0, armed=False)
+                with patch("bridge.server._build_overlay", return_value=None):
+                    code = run_product(preview=True, mock=True, port=0, armed=False)
         self.assertEqual(code, 0)
         opened.assert_called_once()
         url = opened.call_args[0][0]
@@ -253,6 +277,32 @@ class OrientationLaunchTests(unittest.TestCase):
                 code = run_product(preview=False, mock=True, port=0, armed=False)
         self.assertEqual(code, 0)
         opened.assert_not_called()
+
+
+class WebcamCalibrateTests(unittest.TestCase):
+    def test_site_reset_recentres_the_same_machine_without_opening_a_camera(self) -> None:
+        from bridge.source import WebcamSource
+
+        source = WebcamSource()
+        source.machine.calibrate((0.5, 0.5))
+        off = (0.70, 0.50)
+        before = source.machine.update(nose=off, features={}, tracking_valid=True)
+        self.assertFalse(before["centered"])
+        self.assertEqual(before["keys"], ["D"])
+
+        # POST /calibrate and overlay RESET both call source.calibrate().
+        source.calibrate()
+        self.assertTrue(
+            source.apply_pending_calibrate(
+                off,
+                {"mouth_opening": 0.04, "left_eye_opening": 0.08, "right_eye_opening": 0.08},
+            )
+        )
+        after = source.machine.update(nose=off, features={}, tracking_valid=True)
+        self.assertTrue(after["centered"])
+        self.assertEqual(after["keys"], [])
+        self.assertEqual(source.machine.mouth_rest, 0.04)
+        self.assertEqual(source.machine.eye_rest, 0.08)
 
 
 if __name__ == "__main__":

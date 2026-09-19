@@ -37,6 +37,10 @@ not start a second camera.
 open a browser, so Luna can keep keyboard focus. Open the URL yourself only
 when you are not mid-match.
 
+**Find your center** (and overlay RESET) recentre that same live tracker. Pose
+calibration is not stored in the browser; it lives in the `tracking.live`
+process and is what Quartz uses for WASD / Space / L.
+
 UI-only mock, no webcam:
 
 ```bash

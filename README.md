@@ -59,6 +59,8 @@ Do not start this from another directory, and do not point OpenCV at Continuity 
 4. Sit straight in frame. Tap the orange **RESET** on the `FIFA4ALL look axis` overlay (preview mode) so the next valid face pose is neutral.
 5. Look, open your mouth, or wink. Holds stay down until you return to center / close your mouth / stop winking.
 
+Calibration on the orientation site (**Find your center**) and overlay **RESET** both call `POST /calibrate` on this same process. That recentres the one tracker that injects WASD / Space / L into Luna — there is no second live session. Keep the process running when you switch from the website to the match.
+
 ### Mappings
 
 | Gesture | Key (held) | In-game (simplified FC) |
