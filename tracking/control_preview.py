@@ -15,10 +15,8 @@ from tracking.mediapipe_tracker import WebcamFaceTracker
 
 @dataclass(frozen=True)
 class PreviewThresholds:
-    head_turn_left: float = -0.08
-    head_turn_right: float = 0.08
-    head_tilt_up: float = -8.0
-    head_tilt_down: float = 8.0
+    joystick_deadzone_x: float = 0.045
+    joystick_deadzone_y: float = 0.040
     mouth_open: float = 0.09
     left_wink: float = 0.025
     full_space_charge_seconds: float = 1.25
@@ -37,17 +35,36 @@ class HoldState:
         return now - self.started_at
 
 
-def suggested_keys(features: dict[str, float], thresholds: PreviewThresholds) -> list[str]:
+@dataclass
+class NoseJoystickState:
+    center: tuple[float, float] | None = None
+
+    def update(self, nose: tuple[float, float] | None) -> tuple[float, float]:
+        if nose is None:
+            return (0.0, 0.0)
+        if self.center is None:
+            self.center = nose
+        return (nose[0] - self.center[0], nose[1] - self.center[1])
+
+    def reset(self) -> None:
+        self.center = None
+
+
+def suggested_keys(
+    features: dict[str, float],
+    thresholds: PreviewThresholds,
+    joystick_offset: tuple[float, float],
+) -> list[str]:
     """Return keyboard labels for live preview only."""
 
     keys: list[str] = []
-    if features["head_turn"] <= thresholds.head_turn_left:
+    if joystick_offset[0] <= -thresholds.joystick_deadzone_x:
         keys.append("A")
-    if features["head_turn"] >= thresholds.head_turn_right:
+    if joystick_offset[0] >= thresholds.joystick_deadzone_x:
         keys.append("D")
-    if features["head_tilt"] <= thresholds.head_tilt_up:
+    if joystick_offset[1] <= -thresholds.joystick_deadzone_y:
         keys.append("W")
-    if features["head_tilt"] >= thresholds.head_tilt_down:
+    if joystick_offset[1] >= thresholds.joystick_deadzone_y:
         keys.append("S")
     if features["mouth_opening"] >= thresholds.mouth_open:
         keys.append("Space")
@@ -61,6 +78,7 @@ def main() -> int:
 
     thresholds = PreviewThresholds()
     space_hold = HoldState()
+    joystick = NoseJoystickState()
     fps_samples: deque[float] = deque(maxlen=30)
     last_time = monotonic()
 
@@ -82,17 +100,21 @@ def main() -> int:
             frame = tracked.image if tracked.image is not None else _blank_frame()
             if tracked.landmarks is not None:
                 _draw_landmarks(cv2, frame, tracked.landmarks)
+                _draw_joystick(cv2, frame, joystick, tracked.landmarks, thresholds)
 
             if tracked.movement.tracking_valid:
+                nose = _nose_point(tracked.landmarks)
+                joystick_offset = joystick.update(nose)
                 values = {
                     name: feature.value
                     for name, feature in tracked.movement.features.items()
                     if feature.available and feature.value is not None
                 }
-                keys = suggested_keys(values, thresholds)
+                keys = suggested_keys(values, thresholds, joystick_offset)
                 space_hold_seconds = space_hold.update("Space" in keys, now)
             else:
                 values = {}
+                joystick_offset = joystick.update(None)
                 keys = []
                 space_hold_seconds = space_hold.update(False, now)
 
@@ -101,6 +123,7 @@ def main() -> int:
             lines = [
                 f"tracking: {'valid' if tracked.movement.tracking_valid else 'lost'}",
                 f"preview keys: {', '.join(keys) if keys else '-'}",
+                f"nose joystick: x={joystick_offset[0]:.3f} y={joystick_offset[1]:.3f}",
                 f"space hold: {space_hold_seconds:.2f}s ({space_charge * 100:.0f}%)",
                 f"rate: {sum(fps_samples) / max(len(fps_samples), 1):.1f} fps",
             ]
@@ -116,9 +139,12 @@ def main() -> int:
                 end="",
             )
             cv2.imshow("tracking control preview - press q to quit", frame)
-            if cv2.waitKey(1) & 0xFF == ord("q"):
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord("q"):
                 print()
                 return 0
+            if key == ord("r"):
+                joystick.reset()
         return 0
     finally:
         tracker.stop()
@@ -136,6 +162,43 @@ def _draw_landmarks(cv2: object, frame: object, landmarks: list[object]) -> None
         point = landmarks[index]
         center = (int(point.x * width), int(point.y * height))
         cv2.circle(frame, center, 2, (0, 220, 255), -1)
+
+
+def _nose_point(landmarks: list[object] | None) -> tuple[float, float] | None:
+    if landmarks is None:
+        return None
+    nose = landmarks[1]
+    return (float(nose.x), float(nose.y))
+
+
+def _draw_joystick(
+    cv2: object,
+    frame: object,
+    joystick: NoseJoystickState,
+    landmarks: list[object],
+    thresholds: PreviewThresholds,
+) -> None:
+    height, width = frame.shape[:2]
+    nose = _nose_point(landmarks)
+    if nose is None:
+        return
+    nose_px = (int(nose[0] * width), int(nose[1] * height))
+    cv2.circle(frame, nose_px, 5, (0, 255, 0), -1)
+    if joystick.center is None:
+        return
+    center_px = (int(joystick.center[0] * width), int(joystick.center[1] * height))
+    deadzone_px = (
+        int(thresholds.joystick_deadzone_x * width),
+        int(thresholds.joystick_deadzone_y * height),
+    )
+    cv2.rectangle(
+        frame,
+        (center_px[0] - deadzone_px[0], center_px[1] - deadzone_px[1]),
+        (center_px[0] + deadzone_px[0], center_px[1] + deadzone_px[1]),
+        (255, 120, 40),
+        2,
+    )
+    cv2.circle(frame, center_px, 4, (255, 120, 40), -1)
 
 
 def _draw_lines(cv2: object, frame: object, lines: list[str]) -> None:

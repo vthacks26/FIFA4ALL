@@ -57,10 +57,12 @@ MPLCONFIGDIR=.cache/matplotlib python -m tracking.control_preview
 
 It displays suggested labels only:
 
-- head turn left/right: `A` / `D`
-- head tilt up/down: `W` / `S`
+- nose leaves the center deadzone left/right: `A` / `D`
+- nose leaves the center deadzone up/down: `W` / `S`
 - mouth open: `Space`
 - left wink: `L`
+
+The MediaPipe preview acts like a virtual joystick: the first valid nose point is neutral, returning to center means no movement, and pressing `r` resets the neutral center.
 
 `Space` remains active while the mouth stays above the open threshold. The preview also shows `space hold` seconds and a capped charge percentage so the input adapter can later translate a longer mouth-open hold into a longer in-game shot press.
 
