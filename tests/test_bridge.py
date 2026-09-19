@@ -174,6 +174,31 @@ class BridgeServerTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertFalse(body["armed"])
 
+    def test_untrusted_origin_gets_no_cors_grant(self) -> None:
+        """A random page must not be able to read the webcam or arm input."""
+
+        request = urllib.request.Request(
+            self.url("/config"), headers={"Origin": "https://evil.example"}
+        )
+        with urllib.request.urlopen(request, timeout=5) as response:
+            self.assertIsNone(response.headers.get("Access-Control-Allow-Origin"))
+
+    def test_dev_server_origin_is_allowed(self) -> None:
+        request = urllib.request.Request(
+            self.url("/config"), headers={"Origin": "http://localhost:5173"}
+        )
+        with urllib.request.urlopen(request, timeout=5) as response:
+            self.assertEqual(
+                response.headers.get("Access-Control-Allow-Origin"),
+                "http://localhost:5173",
+            )
+
+    def test_requests_without_an_origin_still_work(self) -> None:
+        """curl and the browser's own page send no Origin header."""
+
+        with urllib.request.urlopen(self.url("/config"), timeout=5) as response:
+            self.assertEqual(response.status, 200)
+
     def test_config_reports_whether_keyboard_output_can_work(self) -> None:
         with urllib.request.urlopen(self.url("/config"), timeout=5) as response:
             config = json.loads(response.read())
