@@ -9,8 +9,9 @@ Modes
 ``--image PATH`` Run the real MediaPipe FaceLandmarker on a still image and
                  report the detected head pose and the key it would produce.
 
-``--webcam``     Live capture from the default camera. Intended for the local
-                 Mac that drives Amazon Luna; not usable on a headless box.
+``--webcam``     Live capture from the built-in Mac camera only (never iPhone /
+                 Continuity Camera). Intended for the local Mac that drives
+                 Amazon Luna; not usable on a headless box.
 
 The debug output mirrors joe_plan.txt section 9 (HEAD / OUTPUT).
 """
@@ -108,10 +109,27 @@ def run_webcam() -> int:  # pragma: no cover - needs a camera + display
 
     from .vision.face_landmarks import FaceLandmarkerWrapper
     from .vision.head_pose import head_pose_from_matrix
+    from .vision.mac_camera import list_avfoundation_devices, select_builtin_mac_camera
 
-    cap = cv2.VideoCapture(0)
+    devices = list_avfoundation_devices()
+    listing = ", ".join(f"{d.index}:{d.name!r}" for d in devices) or "(none)"
+    print(f"AVFoundation cameras: {listing}")
+    try:
+        chosen = select_builtin_mac_camera(devices)
+    except RuntimeError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+    print(
+        f"Using built-in Mac camera index={chosen.index} name={chosen.name!r} "
+        "(refusing iPhone/Continuity)"
+    )
+    cap = cv2.VideoCapture(chosen.index, cv2.CAP_AVFOUNDATION)
     if not cap.isOpened():
-        print("ERROR: could not open webcam (device 0).", file=sys.stderr)
+        print(
+            f"ERROR: could not open built-in Mac camera "
+            f"{chosen.index}:{chosen.name!r}.",
+            file=sys.stderr,
+        )
         return 2
 
     keyboard = get_keyboard(prefer_real=True)
@@ -141,7 +159,11 @@ def main(argv: list[str] | None = None) -> int:
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--synthetic", action="store_true", help="scripted demo")
     group.add_argument("--image", metavar="PATH", help="run on a still image")
-    group.add_argument("--webcam", action="store_true", help="live camera (local)")
+    group.add_argument(
+        "--webcam",
+        action="store_true",
+        help="live Mac built-in camera only (never iPhone/Continuity)",
+    )
     args = parser.parse_args(argv)
 
     if args.image:
