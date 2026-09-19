@@ -176,6 +176,7 @@ class ControlStateMachine:
     _direction: Direction | None = None
     _still_since: float | None = None
     _still_anchor: tuple[float, float] | None = None
+    _wink_eye: str | None = None
     _mouth: _EdgeTrigger = field(init=False)
     _wink: _EdgeTrigger = field(init=False)
 
@@ -224,10 +225,12 @@ class ControlStateMachine:
             self._direction = None
             self._still_since = None
             self._still_anchor = None
+            self._wink_eye = None
             self._mouth.update(None, moment)
             self._wink.update(None, moment)
             return self._state(
                 offset=(0.0, 0.0),
+                nose_point=None,
                 mouth_value=None,
                 wink_value=None,
                 mouth_fired=False,
@@ -250,12 +253,19 @@ class ControlStateMachine:
             self._update_movement(offset)
 
         mouth_value = features.get("mouth_opening")
-        wink_value = features.get("left_wink")
+        # `left_wink` is signed: positive when the left eye is more closed,
+        # negative when the right eye is. Magnitude is what matters, so either
+        # eye triggers a pass. Blinking both eyes moves them together and
+        # leaves the difference near zero, so it still does not fire.
+        signed_wink = features.get("left_wink")
+        wink_value = None if signed_wink is None else abs(signed_wink)
+        self._wink_eye = _wink_eye(signed_wink, self.thresholds.wink_off)
         _, mouth_fired = self._mouth.update(mouth_value, moment)
         _, wink_fired = self._wink.update(wink_value, moment)
 
         return self._state(
             offset=offset,
+            nose_point=nose,
             mouth_value=mouth_value,
             wink_value=wink_value,
             mouth_fired=mouth_fired,
@@ -324,6 +334,7 @@ class ControlStateMachine:
         self,
         *,
         offset: tuple[float, float],
+        nose_point: tuple[float, float] | None,
         mouth_value: float | None,
         wink_value: float | None,
         mouth_fired: bool,
@@ -336,6 +347,11 @@ class ControlStateMachine:
         return {
             "centered": direction is None,
             "nose": {"x": round(offset[0], 4), "y": round(offset[1], 4)},
+            # Absolute positions in the mirrored camera image, so the overlay
+            # can put the ball on the actual nose rather than in the middle of
+            # the frame.
+            "nose_point": _point(nose_point),
+            "center_point": _point(self.center),
             "direction": direction,
             "keys": keys,
             "mouth": {
@@ -351,6 +367,7 @@ class ControlStateMachine:
                 "value": wink_value,
                 "confidence": _confidence(wink_value, self.thresholds.wink_on),
                 "held_seconds": round(self._wink.held_seconds(now), 3),
+                "eye": self._wink_eye,
             },
             "tracking": tracking,
             "recentred": self.recentred,
@@ -369,6 +386,20 @@ def _within_zone(offset: tuple[float, float], direction: Direction, margin: floa
     angle = degrees(atan2(-offset[1], offset[0])) % 360.0
     delta = abs((angle - ZONE_CENTERS[direction] + 180.0) % 360.0 - 180.0)
     return delta <= 22.5 + margin
+
+
+def _point(value: tuple[float, float] | None) -> dict[str, float] | None:
+    if value is None:
+        return None
+    return {"x": round(value[0], 4), "y": round(value[1], 4)}
+
+
+def _wink_eye(signed: float | None, deadband: float) -> str | None:
+    """Which eye is winking, or None when neither clearly is."""
+
+    if signed is None or abs(signed) < deadband:
+        return None
+    return "left" if signed > 0 else "right"
 
 
 def _confidence(value: float | None, threshold: float) -> float:

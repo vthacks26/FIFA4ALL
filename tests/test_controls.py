@@ -337,12 +337,51 @@ class GestureDurationTests(unittest.TestCase):
 
 
 class WinkEdgeTriggerTests(unittest.TestCase):
+    """`left_wink` is signed, so either eye must be able to fire a pass."""
+
+    def wink(self, state: ControlStateMachine, value: float) -> dict[str, object]:
+        return state.update(
+            nose=CENTER, features={**NEUTRAL, "left_wink": value}, tracking_valid=True
+        )
+
     def test_wink_fires_once_per_activation(self) -> None:
         state = machine()
-        first = state.update(nose=CENTER, features={**NEUTRAL, "left_wink": 0.1}, tracking_valid=True)
-        held = state.update(nose=CENTER, features={**NEUTRAL, "left_wink": 0.1}, tracking_valid=True)
+        first = self.wink(state, 0.1)
+        held = self.wink(state, 0.1)
         self.assertTrue(first["wink"]["fired"])
         self.assertFalse(held["wink"]["fired"], "eye held closed must not repeat the pass action")
+
+    def test_left_eye_fires_a_pass(self) -> None:
+        result = self.wink(machine(), 0.1)
+        self.assertTrue(result["wink"]["fired"])
+        self.assertEqual(result["wink"]["eye"], "left")
+
+    def test_right_eye_fires_a_pass(self) -> None:
+        """A right wink is negative, and used to be unable to cross the threshold."""
+
+        result = self.wink(machine(), -0.1)
+        self.assertTrue(result["wink"]["fired"])
+        self.assertEqual(result["wink"]["eye"], "right")
+
+    def test_either_eye_works_in_the_same_session(self) -> None:
+        state = machine()
+        self.assertTrue(self.wink(state, 0.1)["wink"]["fired"])
+        self.wink(state, 0.0)
+        self.assertTrue(self.wink(state, -0.1)["wink"]["fired"])
+
+    def test_blinking_both_eyes_does_not_fire(self) -> None:
+        """Both eyes close together, so the difference stays near zero."""
+
+        result = self.wink(machine(), 0.002)
+        self.assertFalse(result["wink"]["fired"])
+        self.assertIsNone(result["wink"]["eye"])
+
+    def test_confidence_is_positive_for_a_right_wink(self) -> None:
+        result = self.wink(machine(), -0.02)
+        self.assertGreater(result["wink"]["confidence"], 0.0)
+
+    def test_neutral_eyes_report_no_winking_eye(self) -> None:
+        self.assertIsNone(self.wink(machine(), 0.0)["wink"]["eye"])
 
 
 class TrackingLossTests(unittest.TestCase):
@@ -387,10 +426,18 @@ class StateContractTests(unittest.TestCase):
         self.assertIn("recentred", state)
 
     def test_confidence_is_clamped_to_unit_range(self) -> None:
+        """Wink magnitude is what counts, so a strong right wink also reads 1.0."""
+
         state = machine().update(
             nose=CENTER, features={"mouth_opening": 99.0, "left_wink": -5.0}, tracking_valid=True
         )
         self.assertEqual(state["mouth"]["confidence"], 1.0)
+        self.assertEqual(state["wink"]["confidence"], 1.0)
+
+    def test_neutral_eyes_report_no_wink_confidence(self) -> None:
+        state = machine().update(
+            nose=CENTER, features={"mouth_opening": 0.0, "left_wink": 0.0}, tracking_valid=True
+        )
         self.assertEqual(state["wink"]["confidence"], 0.0)
 
     def test_thresholds_are_publishable_to_the_ui(self) -> None:

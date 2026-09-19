@@ -13,11 +13,17 @@ export interface ExpressionState {
   readonly confidence: number;
   /** How long the gesture has been held. Shot power comes from this. */
   readonly held_seconds?: number;
+  /** Which eye is winking, when one clearly is. */
+  readonly eye?: "left" | "right" | null;
 }
 
 export interface ControlState {
   readonly centered: boolean;
   readonly nose: { readonly x: number; readonly y: number };
+  /** Absolute nose position in the mirrored camera image, normalized 0-1. */
+  readonly nose_point?: { readonly x: number; readonly y: number } | null;
+  /** Calibrated neutral position in the same space. */
+  readonly center_point?: { readonly x: number; readonly y: number } | null;
   readonly direction: Direction | null;
   readonly keys: readonly MovementKey[];
   readonly mouth: ExpressionState;

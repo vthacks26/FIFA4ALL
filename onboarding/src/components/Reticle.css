@@ -1,19 +1,28 @@
+/* The reticle is now positioned by its anchor inside the camera frame, so its
+   origin is the calibrated neutral point rather than the middle of the box. */
 .reticle {
-  position: relative;
-  display: grid;
-  place-items: center;
-}
-
-.reticle svg {
+  position: absolute;
   overflow: visible;
+  width: 0;
+  height: 0;
 }
 
+/* Strokes must not stretch with the non-uniform scale that makes the zones
+   elliptical, so every stroked shape opts out of it. */
+.reticle svg * {
+  vector-effect: non-scaling-stroke;
+}
+
+/* Overlaid on live video, so the guides carry a dark halo to stay readable
+   against a bright room or a busy background. */
 .reticle__radar,
 .reticle__cross,
 .reticle__divider {
   fill: none;
-  stroke: var(--line);
-  stroke-width: 1;
+  stroke: rgba(180, 205, 235, 0.55);
+  stroke-width: 1.25;
+  paint-order: stroke;
+  filter: drop-shadow(0 0 2px rgba(6, 11, 22, 0.9));
 }
 
 .reticle__cross,
@@ -23,21 +32,22 @@
 
 .reticle__inner {
   fill: none;
-  stroke: rgba(155, 255, 60, 0.25);
-  stroke-width: 1;
+  stroke: rgba(155, 255, 60, 0.55);
+  stroke-width: 1.25;
   stroke-dasharray: 3 5;
 }
 
 .reticle__neutral {
-  fill: rgba(155, 255, 60, 0.07);
+  fill: rgba(155, 255, 60, 0.1);
   stroke: var(--lime);
-  stroke-width: 2.5;
+  stroke-width: 3.5;
+  filter: drop-shadow(0 0 5px rgba(6, 11, 22, 0.95));
   transition: fill 0.15s var(--snap), stroke 0.15s var(--snap);
 }
 
 .reticle__neutral.is-active {
   fill: transparent;
-  stroke: var(--muted);
+  stroke: rgba(220, 235, 250, 0.85);
 }
 
 .reticle__lock {
@@ -64,8 +74,8 @@
 
 .reticle__key {
   position: absolute;
-  top: 50%;
-  left: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 2px 8px rgba(6, 11, 22, 0.8);
   display: grid;
   place-items: center;
   width: 34px;
@@ -89,10 +99,10 @@
 
 .reticle__ball {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transition: transform 0.06s linear;
+  transform: translate(-50%, -50%);
+  transition: left 0.05s linear, top 0.05s linear;
   filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.55));
+  pointer-events: none;
 }
 
 /* Tracking lock: the ring contracts and flashes green once acquired. */
@@ -109,8 +119,9 @@
 
 .reticle__lost {
   position: absolute;
-  /* Clears the S key label that sits at the bottom of the ring. */
-  bottom: -32px;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 12px;
   padding: 5px 12px;
   border-radius: 999px;
   background: var(--red);
