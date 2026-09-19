@@ -157,6 +157,7 @@ class WebcamSource(ControlSource):
             nose,
             mouth_rest=values.get("mouth_opening"),
             eye_rest=eye_rest,
+            brow_rest=values.get("eyebrow_raise"),
         )
         self._recalibrate = False
         return True
@@ -189,10 +190,10 @@ class WebcamSource(ControlSource):
                 features=values,
                 tracking_valid=tracked.movement.tracking_valid,
             )
-            tongue = state.get("tongue")
-            if isinstance(tongue, dict) and tongue.get("fired"):
+            eyebrow = state.get("eyebrow")
+            if isinstance(eyebrow, dict) and eyebrow.get("fired"):
                 print(
-                    "Reset: tongue-out pose baseline cleared. "
+                    "Reset: eyebrow-raise pose baseline cleared. "
                     "Next valid face is neutral.",
                     flush=True,
                 )

@@ -73,7 +73,7 @@ Control state matches the contract in `TECHNICAL_SPEC.md`:
   "keys": ["W", "D"],
   "mouth": {"active": false, "fired": false, "value": 0.03, "confidence": 0.33},
   "wink": {"active": false, "fired": false, "value": 0.01, "confidence": 0.40},
-  "tongue": {"active": false, "fired": false, "value": -0.04, "confidence": 0.0},
+  "eyebrow": {"active": false, "fired": false, "value": 0.10, "confidence": 0.0},
   "tracking": true
 }
 ```

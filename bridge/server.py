@@ -523,7 +523,7 @@ def run_product(
     banner = [
         f"FIFA4ALL live on {intro}  camera={camera_line}",
         "  same process: Quartz WASD / Space hold / wink-L hold",
-        "  overlay RESET, tongue-out, and POST /calibrate recapture neutral",
+        "  overlay RESET, raised eyebrows, and POST /calibrate recapture neutral",
     ]
     if preview:
         banner.append(

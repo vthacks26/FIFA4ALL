@@ -57,7 +57,7 @@ FEATURE_UNITS: Mapping[str, str] = {
     "left_wink": "ratio_delta",
     "left_eye_opening": "ratio",
     "right_eye_opening": "ratio",
-    "tongue_out": "ratio",
+    "eyebrow_raise": "ratio",
 }
 
 FEATURE_DOCUMENTATION = {
@@ -95,11 +95,10 @@ FEATURE_DOCUMENTATION = {
         "Right eyelid gap divided by face width. Same scale and caveats as "
         "left_eye_opening."
     ),
-    "tongue_out": (
-        "How far the inner lower-lip contour extends below the outer lower lip, "
-        "divided by face width. Positive when the tongue protrudes past the lip "
-        "line. A normal open mouth (shoot) keeps this at or below zero because "
-        "the inner lip stays inside the outer lip; sticking the tongue out "
-        "inverts that. Sensitive to lip occlusion and extreme head turns."
+    "eyebrow_raise": (
+        "Average vertical gap from the inner/outer brows to the upper eyelids, "
+        "divided by face width. Larger values mean the brows sit higher. An "
+        "open mouth does not move these landmarks, so shoot cannot look like a "
+        "reset. Sensitive to glasses, bangs, and extreme head pitch."
     ),
 }

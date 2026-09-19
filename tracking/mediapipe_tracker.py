@@ -211,9 +211,6 @@ def _mediapipe_points(landmarks: list[Any]) -> dict[str, Point]:
         "right_cheek": _xy(landmarks[454]),
         "upper_lip": _xy(landmarks[13]),
         "lower_lip": _xy(landmarks[14]),
-        "outer_lower_lip": _xy(landmarks[17]),
-        "inner_lower_left": _xy(landmarks[87]),
-        "inner_lower_right": _xy(landmarks[317]),
         "nose_tip": _xy(landmarks[1]),
         "left_eye": _xy(landmarks[33]),
         "right_eye": _xy(landmarks[263]),
@@ -221,6 +218,11 @@ def _mediapipe_points(landmarks: list[Any]) -> dict[str, Point]:
         "left_lower_eyelid": _xy(landmarks[145]),
         "right_upper_eyelid": _xy(landmarks[386]),
         "right_lower_eyelid": _xy(landmarks[374]),
+        # MediaPipe Face Mesh: inner 107/336, outer 70/300.
+        "left_inner_brow": _xy(landmarks[107]),
+        "left_outer_brow": _xy(landmarks[70]),
+        "right_inner_brow": _xy(landmarks[336]),
+        "right_outer_brow": _xy(landmarks[300]),
     }
 
 

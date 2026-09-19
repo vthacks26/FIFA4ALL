@@ -20,7 +20,7 @@ Once `shared.MovementFrame` is published, adapt the boundary in one place instea
 | `head_turn` | `normalized_x_offset` | Nose-tip x offset from cheek midpoint divided by face width. Positive means the nose moved toward the user's right in the camera image. | Coarse 2D proxy, not true yaw. Camera angle and face shape affect values. |
 | `head_tilt` | `degrees` | Eye-line angle. Positive means the user's right eye appears lower in the camera image. | Assumes the camera is roughly level. Glasses, hair, and occlusion can affect landmarks. |
 | `left_wink` | `ratio_delta` | Right-eye openness minus left-eye openness, normalized by face width. Larger positive values mean the user's left eye appears more closed than the right. | Rough diagnostic only. Sensitive to glasses, shadows, eye shape, camera angle, and partial occlusion. |
-| `tongue_out` | `ratio` | Inner lower-lip contour minus the outer lower lip, divided by face width. Positive when the tongue protrudes past the lip line. | A normal open mouth stays ≤ 0. Sensitive to lip occlusion and extreme head turns. |
+| `eyebrow_raise` | `ratio` | Average vertical gap from the inner/outer brows to the upper eyelids, divided by face width. Larger values mean the brows sit higher. | An open mouth does not move these landmarks. Sensitive to glasses, bangs, and extreme head pitch. |
 
 Do not equate landmark confidence with gesture reliability. Calibration must still ask the user what is comfortable.
 
@@ -58,8 +58,8 @@ http://127.0.0.1:8765/ (Welcome / practice / live HUD) with macOS
 (camera/vision only; non-activating). If the browser does not appear, the
 log prints that URL to click. Recentre from the website
 (**Find your center** / **Reset center**), the overlay **Reset**, or by
-**sticking your tongue out** — all three drive the same
-`ControlStateMachine.calibrate` on the live injector. A held tongue does
+**raising your eyebrows** — all three drive the same
+`ControlStateMachine.calibrate` on the live injector. A held raise does
 not fire repeatedly; opening your mouth to shoot does not reset.
 
 ```bash

@@ -40,9 +40,9 @@ class ThresholdValidationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             ControlThresholds(wink_on=0.02, wink_off=0.03)
 
-    def test_tongue_off_must_be_below_tongue_on(self) -> None:
+    def test_brow_off_must_be_below_brow_on(self) -> None:
         with self.assertRaises(ValueError):
-            ControlThresholds(tongue_on=0.012, tongue_off=0.012)
+            ControlThresholds(brow_on=0.030, brow_off=0.030)
 
 
 class DirectionClassifierTests(unittest.TestCase):
@@ -516,7 +516,7 @@ class StateContractTests(unittest.TestCase):
     def test_state_contains_the_documented_contract_keys(self) -> None:
         state = machine().update(nose=CENTER, features=NEUTRAL, tracking_valid=True)
         self.assertLessEqual(
-            {"centered", "nose", "direction", "keys", "mouth", "wink", "tongue", "tracking"},
+            {"centered", "nose", "direction", "keys", "mouth", "wink", "eyebrow", "tracking"},
             set(state),
         )
 
@@ -543,8 +543,8 @@ class StateContractTests(unittest.TestCase):
         published = ControlThresholds().as_dict()
         self.assertEqual(published["enter_radius"], ControlThresholds().enter_radius)
         self.assertIn("mouth_open", published)
-        self.assertIn("tongue_on", published)
-        self.assertIn("tongue_off", published)
+        self.assertIn("brow_on", published)
+        self.assertIn("brow_off", published)
 
     def test_hold_labels_include_space_and_l(self) -> None:
         state = machine().update(
@@ -555,72 +555,115 @@ class StateContractTests(unittest.TestCase):
         self.assertEqual(set(hold_labels(state)), {"W", "Space", "L"})
 
 
-class TongueResetTests(unittest.TestCase):
-    """Sticking the tongue out recentres pose; an open mouth must not."""
+class EyebrowResetTests(unittest.TestCase):
+    """Raising the eyebrows recentres pose; an open mouth must not."""
 
-    OPEN_MOUTH = {"mouth_opening": 0.2, "left_wink": 0.0, "tongue_out": -0.08}
-    TONGUE = {"mouth_opening": 0.18, "left_wink": 0.0, "tongue_out": 0.04}
+    REST = 0.10
+    OPEN_MOUTH = {"mouth_opening": 0.2, "left_wink": 0.0, "eyebrow_raise": 0.10}
+    RAISE = {"mouth_opening": 0.0, "left_wink": 0.0, "eyebrow_raise": 0.14}
+
+    def with_rest(self) -> ControlStateMachine:
+        state = machine()
+        state.update(
+            nose=CENTER, features={**NEUTRAL, "eyebrow_raise": self.REST},
+            tracking_valid=True, now=-1.0,
+        )
+        return state
 
     def test_open_mouth_does_not_recalibrate(self) -> None:
-        state = machine()
+        state = self.with_rest()
         state.update(nose=at(0.12, 0.0), features=self.OPEN_MOUTH, tracking_valid=True, now=0.0)
         result = state.update(
             nose=at(0.12, 0.0), features=self.OPEN_MOUTH, tracking_valid=True, now=0.1
         )
-        self.assertFalse(result["tongue"]["fired"])
+        self.assertFalse(result["eyebrow"]["fired"])
         self.assertFalse(result["centered"])
         self.assertTrue(result["mouth"]["active"])
 
-    def test_tongue_out_calibrates_the_current_nose_as_neutral(self) -> None:
-        state = machine()
+    def test_eyebrow_raise_calibrates_the_current_nose_as_neutral(self) -> None:
+        state = self.with_rest()
         drifted = at(0.12, 0.0)
-        state.update(nose=drifted, features=NEUTRAL, tracking_valid=True, now=0.0)
-        result = state.update(nose=drifted, features=self.TONGUE, tracking_valid=True, now=0.1)
-        self.assertTrue(result["tongue"]["fired"])
-        self.assertTrue(result["centered"], "tongue-out must recapture neutral like RESET")
+        state.update(nose=drifted, features={**NEUTRAL, "eyebrow_raise": self.REST}, tracking_valid=True, now=0.0)
+        result = state.update(nose=drifted, features=self.RAISE, tracking_valid=True, now=0.1)
+        self.assertTrue(result["eyebrow"]["fired"])
+        self.assertTrue(result["centered"], "eyebrow raise must recapture neutral like RESET")
         self.assertEqual(result["keys"], [])
 
-    def test_held_tongue_does_not_recalibrate_again(self) -> None:
-        state = machine()
-        first = state.update(nose=CENTER, features=self.TONGUE, tracking_valid=True, now=0.0)
-        held = state.update(nose=at(0.12, 0.0), features=self.TONGUE, tracking_valid=True, now=0.2)
-        self.assertTrue(first["tongue"]["fired"])
-        self.assertFalse(held["tongue"]["fired"])
-        self.assertTrue(held["tongue"]["active"])
+    def test_held_raise_does_not_recalibrate_again(self) -> None:
+        state = self.with_rest()
+        first = state.update(nose=CENTER, features=self.RAISE, tracking_valid=True, now=0.0)
+        held = state.update(nose=at(0.12, 0.0), features=self.RAISE, tracking_valid=True, now=0.2)
+        self.assertTrue(first["eyebrow"]["fired"])
+        self.assertFalse(held["eyebrow"]["fired"])
+        self.assertTrue(held["eyebrow"]["active"])
         # Still latched, so a later nose should not keep re-centring.
         self.assertEqual(held["direction"], "E")
 
-    def test_tongue_refires_only_after_dropping_below_reset(self) -> None:
-        state = machine()
-        state.update(nose=CENTER, features=self.TONGUE, tracking_valid=True, now=0.0)
+    def test_raise_refires_only_after_dropping_below_reset(self) -> None:
+        state = self.with_rest()
+        state.update(nose=CENTER, features=self.RAISE, tracking_valid=True, now=0.0)
         state.update(nose=CENTER, features=self.OPEN_MOUTH, tracking_valid=True, now=0.2)
-        again = state.update(nose=at(0.12, 0.0), features=self.TONGUE, tracking_valid=True, now=0.4)
-        self.assertTrue(again["tongue"]["fired"])
+        again = state.update(nose=at(0.12, 0.0), features=self.RAISE, tracking_valid=True, now=0.4)
+        self.assertTrue(again["eyebrow"]["fired"])
         self.assertTrue(again["centered"])
 
-    def test_tongue_out_does_not_hold_the_shoot_latch(self) -> None:
-        state = machine()
-        result = state.update(nose=CENTER, features=self.TONGUE, tracking_valid=True, now=0.0)
-        self.assertFalse(result["mouth"]["active"])
-        self.assertFalse(result["mouth"]["fired"])
-        self.assertNotIn("Space", hold_labels(result))
+    def test_open_mouth_still_holds_shoot_while_brows_are_resting(self) -> None:
+        state = self.with_rest()
+        result = state.update(nose=CENTER, features=self.OPEN_MOUTH, tracking_valid=True, now=0.0)
+        self.assertTrue(result["mouth"]["active"])
+        self.assertIn("Space", hold_labels(result))
+        self.assertFalse(result["eyebrow"]["fired"])
 
-    def test_tongue_out_does_not_raise_mouth_rest_thresholds(self) -> None:
-        state = machine()
+    def test_eyebrow_raise_does_not_raise_mouth_rest_thresholds(self) -> None:
+        state = self.with_rest()
         before = state.mouth_thresholds
-        state.update(nose=CENTER, features=self.TONGUE, tracking_valid=True, now=0.0)
+        state.update(nose=CENTER, features=self.RAISE, tracking_valid=True, now=0.0)
         self.assertEqual(state.mouth_thresholds, before)
 
-    def test_missing_tongue_feature_does_not_reset(self) -> None:
-        state = machine()
+    def test_missing_eyebrow_feature_does_not_reset(self) -> None:
+        state = self.with_rest()
         result = state.update(
             nose=at(0.12, 0.0),
             features={"mouth_opening": 0.2, "left_wink": 0.0},
             tracking_valid=True,
             now=0.0,
         )
-        self.assertFalse(result["tongue"]["fired"])
+        self.assertFalse(result["eyebrow"]["fired"])
         self.assertFalse(result["centered"])
+
+    def test_first_frame_samples_rest_and_does_not_fire(self) -> None:
+        """A face that arrives already raised must not reset on sight."""
+
+        state = machine()
+        result = state.update(nose=CENTER, features=self.RAISE, tracking_valid=True, now=0.0)
+        self.assertFalse(result["eyebrow"]["fired"])
+        self.assertAlmostEqual(state.brow_rest or 0.0, self.RAISE["eyebrow_raise"])
+
+    def test_gesture_reset_does_not_resample_brow_rest(self) -> None:
+        state = self.with_rest()
+        before = state.brow_rest
+        state.update(nose=CENTER, features=self.RAISE, tracking_valid=True, now=0.0)
+        self.assertEqual(state.brow_rest, before)
+
+    def test_click_calibrate_resamples_brow_rest(self) -> None:
+        state = self.with_rest()
+        state.calibrate(CENTER, brow_rest=0.08)
+        # 0.10 was a raise against the old rest; against 0.08 it is still a
+        # raise, but 0.10 is only +0.02, below brow_on=0.030.
+        result = state.update(
+            nose=CENTER,
+            features={"mouth_opening": 0.0, "left_wink": 0.0, "eyebrow_raise": 0.10},
+            tracking_valid=True,
+            now=0.0,
+        )
+        self.assertFalse(result["eyebrow"]["fired"])
+        high = state.update(
+            nose=CENTER,
+            features={"mouth_opening": 0.0, "left_wink": 0.0, "eyebrow_raise": 0.12},
+            tracking_valid=True,
+            now=0.1,
+        )
+        self.assertTrue(high["eyebrow"]["fired"])
 
 
 if __name__ == "__main__":
