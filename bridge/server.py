@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from time import monotonic
@@ -188,11 +189,26 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return
 
 
+class QuietThreadingHTTPServer(ThreadingHTTPServer):
+    """HTTP server that does not log a traceback when a client disconnects.
+
+    Browsers drop long-lived MJPEG and SSE connections whenever a tab closes or
+    reloads, which is normal here and must not spam the demo console.
+    """
+
+    daemon_threads = True
+
+    def handle_error(self, request: object, client_address: object) -> None:
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)):
+            return
+        super().handle_error(request, client_address)  # type: ignore[arg-type]
+
+
 def build_server(source: ControlSource, port: int = DEFAULT_PORT) -> tuple[ThreadingHTTPServer, ControlHub]:
     hub = ControlHub(source)
     handler = type("BoundBridgeHandler", (BridgeHandler,), {"hub": hub})
-    server = ThreadingHTTPServer(("127.0.0.1", port), handler)
-    server.daemon_threads = True
+    server = QuietThreadingHTTPServer(("127.0.0.1", port), handler)
     return (server, hub)
 
 
