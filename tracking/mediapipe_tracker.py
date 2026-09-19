@@ -7,6 +7,7 @@ before using this module on a Mac.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
 from dataclasses import dataclass
 from time import monotonic
@@ -33,14 +34,17 @@ class WebcamFaceTracker:
         camera_index: int = 0,
         *,
         max_width: int = 960,
+        model_path: str | None = None,
         config: FeatureConfig | None = None,
     ) -> None:
         self.camera_index = camera_index
         self.max_width = max_width
+        self.model_path = model_path or os.environ.get("FIFA4ALL_FACE_LANDMARKER_MODEL")
         self.extractor = FaceFeatureExtractor(config)
         self._cv2: Any | None = None
-        self._face_mesh: Any | None = None
+        self._landmarker: Any | None = None
         self._capture: Any | None = None
+        self._mp: Any | None = None
 
     def __enter__(self) -> "WebcamFaceTracker":
         self.start()
@@ -50,29 +54,23 @@ class WebcamFaceTracker:
         self.stop()
 
     def start(self) -> None:
+        os.environ.setdefault("MPLCONFIGDIR", os.path.join(os.getcwd(), ".cache", "matplotlib"))
         import cv2  # type: ignore[import-not-found]
-        import mediapipe as mp  # type: ignore[import-not-found]
 
         self._cv2 = cv2
+        self._landmarker = self._create_landmarker()
         self._capture = cv2.VideoCapture(self.camera_index)
         self._capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         if not self._capture.isOpened():
             raise RuntimeError(f"Could not open camera index {self.camera_index}")
-        self._face_mesh = mp.solutions.face_mesh.FaceMesh(
-            static_image_mode=False,
-            max_num_faces=1,
-            refine_landmarks=True,
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5,
-        )
 
     def stop(self) -> None:
         if self._capture is not None:
             self._capture.release()
             self._capture = None
-        if self._face_mesh is not None:
-            self._face_mesh.close()
-            self._face_mesh = None
+        if self._landmarker is not None:
+            self._landmarker.close()
+            self._landmarker = None
         if self._cv2 is not None:
             self._cv2.destroyAllWindows()
 
@@ -81,11 +79,11 @@ class WebcamFaceTracker:
             yield tracked.image, tracked.movement
 
     def tracked_frames(self) -> Iterator[WebcamTrackingFrame]:
-        if self._capture is None or self._face_mesh is None or self._cv2 is None:
+        if self._capture is None or self._landmarker is None or self._cv2 is None:
             self.start()
 
         assert self._capture is not None
-        assert self._face_mesh is not None
+        assert self._landmarker is not None
         assert self._cv2 is not None
 
         while True:
@@ -95,14 +93,13 @@ class WebcamFaceTracker:
                 continue
 
             frame = self._resize(frame)
-            rgb = self._cv2.cvtColor(frame, self._cv2.COLOR_BGR2RGB)
-            result = self._face_mesh.process(rgb)
-            if not result.multi_face_landmarks:
+            result = self._detect(frame)
+            if not result.face_landmarks:
                 self.extractor.reset()
                 yield WebcamTrackingFrame(frame, _invalid_frame("face_not_found"))
                 continue
 
-            landmarks = result.multi_face_landmarks[0].landmark
+            landmarks = result.face_landmarks[0]
             points = _mediapipe_points(landmarks)
             movement = self.extractor.from_named_points(points, timestamp_monotonic=monotonic())
             yield WebcamTrackingFrame(frame, movement, landmarks)
@@ -124,6 +121,32 @@ class WebcamFaceTracker:
             return frame
         scale = self.max_width / width
         return self._cv2.resize(frame, (self.max_width, int(height * scale)))
+
+    def _create_landmarker(self) -> Any:
+        import mediapipe as mp  # type: ignore[import-not-found]
+
+        self._mp = mp
+        if not self.model_path:
+            raise RuntimeError(
+                "MediaPipe Tasks requires a face landmarker model. Set "
+                "FIFA4ALL_FACE_LANDMARKER_MODEL to a local .task file."
+            )
+        base_options = mp.tasks.BaseOptions(model_asset_path=self.model_path)
+        options = mp.tasks.vision.FaceLandmarkerOptions(
+            base_options=base_options,
+            running_mode=mp.tasks.vision.RunningMode.IMAGE,
+            num_faces=1,
+        )
+        return mp.tasks.vision.FaceLandmarker.create_from_options(options)
+
+    def _detect(self, frame: Any) -> Any:
+        assert self._cv2 is not None
+        assert self._landmarker is not None
+        assert self._mp is not None
+
+        rgb = self._cv2.cvtColor(frame, self._cv2.COLOR_BGR2RGB)
+        image = self._mp.Image(image_format=self._mp.ImageFormat.SRGB, data=rgb)
+        return self._landmarker.detect(image)
 
 
 def _invalid_frame(reason: str) -> MovementFrame:
