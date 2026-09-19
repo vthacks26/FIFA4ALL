@@ -49,6 +49,22 @@ MPLCONFIGDIR=.cache/matplotlib python -m tracking.diagnostic
 
 The diagnostic opens a webcam preview, overlays live feature values, shows tracking status, and reports measured processing rate. Press `q` to quit. The camera is released on normal exit.
 
+For Quartz OS key holds into the frontmost app (Google Chrome / Luna), MacBook camera only.
+
+Face + WASD look-axis overlay (non-activating, not click-through). Sit straight and tap the **Reset** button on the look-axis window to recapture the neutral nose axis:
+
+```bash
+MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --preview
+```
+
+Headless inject (no overlay):
+
+```bash
+MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --no-preview
+```
+
+This uses the same nose-joystick / mouth-Space-hold / wink-L mapping as the preview, posted via `CGEventPost(kCGHIDEventTap)`.
+
 For a live control-label preview that does not send keyboard input:
 
 ```bash
@@ -68,7 +84,7 @@ The MediaPipe preview acts like a virtual joystick: the first valid nose point i
 
 These are temporary preview labels for tracking validation. Person 3 still owns real input adapters and action assignment.
 
-On macOS, the first run may trigger a camera permission prompt. If the preview cannot open camera index `0`, grant camera access to the terminal or Codex host in System Settings, then rerun the command.
+On macOS, live capture enumerates AVFoundation devices by name and opens only `MacBook Pro Camera` / FaceTime / built-in. It never opens or probes iPhone or Continuity Camera indexes — if OpenCV index `0` is the phone, that index is skipped. The first run may trigger a camera permission prompt for the Mac camera only. Grant camera access to the terminal or Codex host in System Settings, then rerun the command.
 
 If MediaPipe is unavailable on a teammate's Mac, use the lighter OpenCV nose fallback:
 

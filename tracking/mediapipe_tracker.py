@@ -15,6 +15,7 @@ from typing import Any
 
 from tracking.features import FaceFeatureExtractor, FeatureConfig, Point
 from tracking.frames import FEATURE_UNITS, MovementFeature, MovementFrame
+from tracking.mac_camera import refuse_if_phone, resolve_mac_camera
 
 
 @dataclass(frozen=True)
@@ -33,11 +34,16 @@ class WebcamFaceTracker:
         self,
         camera_index: int = 0,
         *,
+        camera_name: str | None = None,
+        camera_unique_id: str | None = None,
         max_width: int = 960,
         model_path: str | None = None,
         config: FeatureConfig | None = None,
     ) -> None:
         self.camera_index = camera_index
+        self.camera_name = camera_name
+        self.camera_unique_id = camera_unique_id
+        self.opened_camera_name = camera_name
         self.max_width = max_width
         self.model_path = model_path or os.environ.get("FIFA4ALL_FACE_LANDMARKER_MODEL")
         self.extractor = FaceFeatureExtractor(config)
@@ -64,10 +70,24 @@ class WebcamFaceTracker:
         self._face_mesh = self._create_face_mesh(mp) if hasattr(mp, "solutions") else None
         if self._face_mesh is None:
             self._landmarker = self._create_landmarker(mp)
-        self._capture = cv2.VideoCapture(self.camera_index)
+        chosen = resolve_mac_camera(
+            camera_index=self.camera_index,
+            camera_name=self.camera_name,
+            camera_unique_id=self.camera_unique_id,
+        )
+        refuse_if_phone(chosen)
+        self.camera_index = chosen.index
+        self.camera_name = chosen.name
+        self.camera_unique_id = chosen.unique_id
+        self.opened_camera_name = chosen.name
+        # Open only the named Mac index. Never probe other indexes / Continuity.
+        backend = getattr(cv2, "CAP_AVFOUNDATION", 0)
+        self._capture = cv2.VideoCapture(int(chosen.index), backend)
         self._capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         if not self._capture.isOpened():
-            raise RuntimeError(f"Could not open camera index {self.camera_index}")
+            raise RuntimeError(
+                f"Could not open Mac camera index={chosen.index} name={chosen.name!r}"
+            )
 
     def stop(self) -> None:
         if self._capture is not None:
