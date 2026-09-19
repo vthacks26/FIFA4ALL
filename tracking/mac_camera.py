@@ -34,29 +34,52 @@ def name_is_builtin_mac(name: str, is_continuity: bool = False) -> bool:
 
 
 def select_builtin_mac_camera(devices: Sequence[CameraDevice]) -> CameraDevice:
+    """Pick a camera to open, preferring the built-in one.
+
+    The point of this module is to never grab someone's iPhone over Continuity,
+    which is a privacy surprise and usually not pointed at their face. Refusing
+    everything that is not a recognised built-in achieves that, but it also
+    refuses hardware that is perfectly fine: a Studio Display camera, or any USB
+    webcam on a Mac mini or Mac Studio, none of which match the built-in name
+    markers. On a machine like that the bridge would not start at all.
+
+    So phones stay refused, built-ins stay preferred, and anything else is used
+    as a fallback rather than treated as a failure.
+    """
+
     if not devices:
         raise RuntimeError("No AVFoundation video cameras were listed.")
     builtin = [d for d in devices if name_is_builtin_mac(d.name, d.is_continuity)]
     if builtin:
         return builtin[0]
+    other = [d for d in devices if not name_is_phone(d.name, d.is_continuity)]
+    if other:
+        return other[0]
     listing = ", ".join(f"{d.index}:{d.name!r}" for d in devices)
     raise RuntimeError(
-        "Could not find a built-in Mac camera (MacBook / FaceTime). "
-        f"Refusing iPhone/Continuity. Devices: {listing}"
+        "Every listed camera is an iPhone or Continuity Camera, which this "
+        f"refuses to open. Devices: {listing}"
     )
 
 
 def allowed_opencv_indexes(devices: Sequence[CameraDevice]) -> list[int]:
-    """Indexes OpenCV may open. Never iPhone/Continuity — skip 0 when it is the phone."""
+    """Indexes OpenCV may open. Never iPhone/Continuity — skip 0 when it is the phone.
 
-    allowed: list[int] = []
+    Built-in cameras come first so they are still preferred, but other cameras
+    remain openable; otherwise a machine whose only camera is a Studio Display
+    or a USB webcam would have no allowed index at all.
+    """
+
+    builtin: list[int] = []
+    other: list[int] = []
     for device in devices:
         if name_is_phone(device.name, device.is_continuity):
             continue
-        if not name_is_builtin_mac(device.name, device.is_continuity):
-            continue
-        allowed.append(device.index)
-    return allowed
+        if name_is_builtin_mac(device.name, device.is_continuity):
+            builtin.append(device.index)
+        else:
+            other.append(device.index)
+    return builtin + other
 
 
 def skipped_phone_devices(devices: Sequence[CameraDevice]) -> list[CameraDevice]:
@@ -88,9 +111,11 @@ def resolve_mac_camera(
     if camera_name:
         for device in listed:
             if device.name == camera_name:
+                # An explicitly named camera is honoured whatever it is, short of
+                # a phone. Silently ignoring the name and falling through to the
+                # built-in is worse than opening what was asked for.
                 refuse_if_phone(device)
-                if name_is_builtin_mac(device.name, device.is_continuity):
-                    return device
+                return device
     for device in listed:
         if device.index != camera_index:
             continue

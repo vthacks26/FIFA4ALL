@@ -67,6 +67,53 @@ class MacCameraTests(unittest.TestCase):
                 [CameraDevice(0, "iPhone (33) Camera", is_continuity=True)]
             )
 
+    def test_uses_studio_display_when_there_is_no_builtin(self):
+        # A Mac mini or Mac Studio has no built-in camera at all, so refusing
+        # everything unrecognised would leave the bridge unable to start.
+        devices = [CameraDevice(0, "Studio Display Camera", unique_id="sd-id")]
+        chosen = select_builtin_mac_camera(devices)
+        self.assertEqual(chosen.name, "Studio Display Camera")
+        self.assertEqual(allowed_opencv_indexes(devices), [0])
+
+    def test_uses_usb_webcam_when_there_is_no_builtin(self):
+        devices = [CameraDevice(0, "Logitech StreamCam")]
+        self.assertEqual(select_builtin_mac_camera(devices).index, 0)
+        self.assertEqual(allowed_opencv_indexes(devices), [0])
+
+    def test_prefers_builtin_over_external(self):
+        devices = [
+            CameraDevice(0, "Logitech StreamCam"),
+            CameraDevice(1, "MacBook Pro Camera"),
+        ]
+        self.assertEqual(select_builtin_mac_camera(devices).index, 1)
+        # Built-in first, but the external stays openable.
+        self.assertEqual(allowed_opencv_indexes(devices), [1, 0])
+
+    def test_still_refuses_phone_even_with_no_other_camera(self):
+        devices = [
+            CameraDevice(0, "iPhone (33) Camera", is_continuity=True),
+            CameraDevice(1, "Desk View Camera", is_continuity=True),
+        ]
+        with self.assertRaises(RuntimeError):
+            select_builtin_mac_camera(devices)
+        self.assertEqual(allowed_opencv_indexes(devices), [])
+
+    def test_external_camera_chosen_over_phone_at_index_zero(self):
+        devices = [
+            CameraDevice(0, "iPhone Camera", is_continuity=True),
+            CameraDevice(1, "Studio Display Camera"),
+        ]
+        chosen = resolve_mac_camera(camera_index=0, devices=devices)
+        self.assertEqual(chosen.name, "Studio Display Camera")
+
+    def test_explicit_camera_name_is_honoured_for_external(self):
+        devices = [
+            CameraDevice(0, "MacBook Pro Camera"),
+            CameraDevice(1, "Logitech StreamCam"),
+        ]
+        chosen = resolve_mac_camera(camera_name="Logitech StreamCam", devices=devices)
+        self.assertEqual(chosen.index, 1)
+
     def test_phone_markers(self):
         self.assertTrue(name_is_phone("iPhone Camera", False))
         self.assertFalse(name_is_phone("MacBook Pro Camera", False))

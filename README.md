@@ -7,7 +7,7 @@ This is a VTHacks accessibility hack. The live path in this branch injects macOS
 ## Requirements
 
 - macOS (Quartz `CGEventPost` key injection only works here)
-- Built-in **MacBook Pro Camera** (FaceTime / built-in Mac camera). Live capture **never** opens iPhone or Continuity Camera indexes.
+- A camera that is not a phone. The built-in Mac camera is preferred; a Studio Display or USB webcam is used when the machine has no built-in one. Live capture **never** opens iPhone or Continuity Camera indexes.
 - Google Chrome with Amazon Luna, EA Sports FC in the simplified keyboard layout
 - Python 3.12 (MediaPipe `0.10.14` is pinned for 3.12; 3.14 is not a reliable runtime for this stack)
 - Camera **and** Accessibility permission for Terminal / Python (see [Permissions](#permissions))
@@ -49,7 +49,13 @@ MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --no-preview
 
 `--no-preview` wins if both flags are passed. Quit with **Ctrl+C**. Lost face tracking releases every held key.
 
-Do not start this from another directory, and do not point OpenCV at Continuity Camera. The process enumerates AVFoundation devices by name and opens only a built-in Mac camera (`MacBook Pro Camera` / FaceTime / built-in). If index `0` is an iPhone, that index is skipped.
+Do not start this from another directory. The process enumerates AVFoundation devices by name and prefers a built-in Mac camera (`MacBook Pro Camera` / FaceTime / built-in), falling back to any other non-phone camera such as a Studio Display or a USB webcam. If index `0` is an iPhone, that index is skipped. On an unfamiliar Mac, list what it exposes first:
+
+```bash
+MPLCONFIGDIR=.cache/matplotlib python -m bridge.server --list-cameras
+```
+
+Then force a specific device with `python -m bridge.server --camera-name 'Studio Display Camera'`. Anything but a phone is honoured. `--list-cameras` does not start capture, so it still answers when tracking itself is broken.
 
 ## Play on Luna
 
@@ -61,11 +67,11 @@ Do not start this from another directory, and do not point OpenCV at Continuity 
 
 ### Mappings
 
-| Gesture | Key (held) | In-game (simplified FC) |
-| --- | --- | --- |
-| Nose / head look axis (leave the center deadzone) | `W` `A` `S` `D` | Move |
-| Mouth open | `Space` | Shoot (hold while the mouth stays open) |
-| Left wink | `L` | Pass (hold while the wink is detected) |
+| Gesture                                           | Key (held)      | In-game (simplified FC)                 |
+| ------------------------------------------------- | --------------- | --------------------------------------- |
+| Nose / head look axis (leave the center deadzone) | `W` `A` `S` `D` | Move                                    |
+| Mouth open                                        | `Space`         | Shoot (hold while the mouth stays open) |
+| Left wink                                         | `L`             | Pass (hold while the wink is detected)  |
 
 The first valid nose point after start or Reset is the joystick center. Returning to that center releases WASD. Combinations are allowed (for example look + shoot).
 
@@ -84,6 +90,39 @@ In **System Settings → Privacy & Security**:
 
 Grant these to the process that actually runs `python -m tracking.live`, not only to Chrome.
 
+## Running on a different Mac
+
+Permissions are granted per app and per machine, so nothing carries over from
+the machine this was built on. On a fresh Mac, in order:
+
+1. **Python 3.12 exactly.** MediaPipe `0.10.14` is pinned to it. 3.13 and 3.14
+   resolve to a different package with a different API and will not work.
+2. **Check the camera before anything else**, because this is the step most
+   likely to surprise you on unfamiliar hardware:
+
+   ```bash
+   MPLCONFIGDIR=.cache/matplotlib python -m bridge.server --list-cameras
+   ```
+
+   A built-in camera is preferred, a Studio Display or USB webcam is used when
+   there is no built-in one, and iPhone / Continuity is always refused. If the
+   wrong device is picked, pass `--camera-name` with a name from that listing.
+
+3. **Grant Camera and Accessibility to the terminal you will actually use**,
+   then quit and reopen it — macOS only applies the grant to new processes.
+   Verify with `python -m output.selftest` rather than assuming.
+4. **Start the bridge before loading the onboarding page.** The UI probes the
+   bridge once when it mounts; if it is not up yet the page latches to mock mode
+   and only a reload will recover it.
+5. **Check the ports are free.** The bridge needs `8765` and Vite needs `5173`.
+   Vite silently moves to `5174` when `5173` is taken, and the bridge's CORS
+   allowlist does not include `5174`, so the page loads but cannot reach the
+   bridge.
+
+Accessibility cannot be granted to a `launchd` job or any process without a GUI
+app identity — macOS will deny the camera outright with `not authorized to
+capture video`. Run the bridge from a real terminal.
+
 ## Tests (no camera)
 
 Mapping, camera-name selection, and Reset geometry tests do not open the webcam:
@@ -98,11 +137,11 @@ The overlay annotate test imports OpenCV, so install `tracking/requirements.txt`
 
 These exist but are **not** the Luna injector:
 
-| Command | What it does |
-| --- | --- |
+| Command                                                             | What it does                                                                                    |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | `MPLCONFIGDIR=.cache/matplotlib python -m tracking.control_preview` | Same suggested labels; **does not** send keys. Press `q` to quit, `r` to reset the nose center. |
-| `MPLCONFIGDIR=.cache/matplotlib python -m tracking.diagnostic` | Webcam feature overlay. Press `q` to quit. |
-| `python -m tracking.haar_control_preview` | Lighter OpenCV nose fallback (WASD preview only; no mouth/wink, no Quartz inject). |
+| `MPLCONFIGDIR=.cache/matplotlib python -m tracking.diagnostic`      | Webcam feature overlay. Press `q` to quit.                                                      |
+| `python -m tracking.haar_control_preview`                           | Lighter OpenCV nose fallback (WASD preview only; no mouth/wink, no Quartz inject).              |
 
 More tracking notes: [`tracking/README.md`](tracking/README.md).
 

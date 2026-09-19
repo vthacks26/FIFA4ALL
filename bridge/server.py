@@ -309,15 +309,43 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument(
+        "--camera-name",
+        default=None,
+        help=(
+            "open this AVFoundation device by exact name instead of picking one. "
+            "Use --list-cameras to see the names on this Mac. Phones are still refused."
+        ),
+    )
+    parser.add_argument(
+        "--list-cameras",
+        action="store_true",
+        help="print the cameras this Mac exposes, then exit",
+    )
+    parser.add_argument(
         "--overlay",
         action="store_true",
         help="float a look-axis window above the game for the player",
     )
     args = parser.parse_args()
 
-    source: ControlSource = MockSource() if args.mock else WebcamSource(camera_index=args.camera)
+    if args.list_cameras:
+        from tracking.mac_camera import list_avfoundation_devices, name_is_phone
+
+        devices = list_avfoundation_devices()
+        if not devices:
+            print("No AVFoundation cameras listed.", flush=True)
+            return 1
+        for device in devices:
+            refused = " (refused: phone/Continuity)" if name_is_phone(device.name, device.is_continuity) else ""
+            print(f"  {device.index}: {device.name!r}{refused}", flush=True)
+        return 0
+
+    source: ControlSource = (
+        MockSource()
+        if args.mock
+        else WebcamSource(camera_index=args.camera, camera_name=args.camera_name)
+    )
     server, hub = build_server(source, args.port)
-    hub.start()
 
     mode = "mock" if args.mock else "webcam"
     # Flushed explicitly: stdout is block-buffered when piped to a log file, and
@@ -335,7 +363,9 @@ def main() -> int:
     print("\n".join(banner), flush=True)
 
     # The HTTP server is threaded so the capture loop owns the main thread,
-    # which macOS requires for any window drawing.
+    # which macOS requires for any window drawing. The capture loop is started
+    # here and nowhere else: calling `hub.start()` as well would run a second
+    # one on a background thread, and the two would fight over the one camera.
     threading.Thread(target=server.serve_forever, name="bridge-http", daemon=True).start()
     try:
         hub.run(on_frame=_build_overlay(hub) if args.overlay else None)
