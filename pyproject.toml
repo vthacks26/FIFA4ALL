@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fifa4all"
+version = "0.1.0"
+description = "Face-controlled keyboard input for EA Sports FC on Amazon Luna"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.24",
+  "opencv-python>=4.8; sys_platform == 'darwin'",
+  "opencv-python-headless>=4.8; sys_platform != 'darwin'",
+  "mediapipe>=0.10.14",
+  "pynput>=1.7.6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4"]
+
+[project.scripts]
+fifa4all = "fifa4all.app:main"
+
+[tool.setuptools.packages.find]
+include = ["fifa4all*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
