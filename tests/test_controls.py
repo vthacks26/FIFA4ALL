@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import unittest
 
+from tracking.bindings import CHANNELS, default_bindings
 from tracking.controls import (
     CARDINALS,
     DIRECTION_KEYS,
+    LEGACY_CHANNEL_KEYS,
     ControlStateMachine,
     ControlThresholds,
     classify_direction,
@@ -538,6 +540,69 @@ class StateContractTests(unittest.TestCase):
         published = ControlThresholds().as_dict()
         self.assertEqual(published["enter_radius"], ControlThresholds().enter_radius)
         self.assertIn("mouth_open", published)
+
+
+class ChannelViewTests(unittest.TestCase):
+    """The generic per-channel view, added so a drill can watch any channel."""
+
+    def _fired(self) -> dict[str, object]:
+        state = machine()
+        return state.update(
+            nose=CENTER,
+            features={"mouth_opening": 0.2, "left_wink": 0.1, "left_eye_opening": 0.1, "right_eye_opening": 0.1},
+            tracking_valid=True,
+        )
+
+    def test_state_carries_one_entry_per_registered_channel(self) -> None:
+        channels = self._fired()["channels"]
+        self.assertEqual(set(channels), set(CHANNELS))
+
+    def test_channel_view_and_legacy_key_report_the_same_values(self) -> None:
+        """Phase 2 has not run, so the old keys must still be exact."""
+
+        state = self._fired()
+        for channel_name, legacy_key in LEGACY_CHANNEL_KEYS.items():
+            with self.subTest(channel=channel_name):
+                self.assertEqual(state[legacy_key], state["channels"][channel_name])
+
+    def test_legacy_mouth_key_still_reports_the_shoot_gesture(self) -> None:
+        state = self._fired()
+        self.assertTrue(state["mouth"]["fired"])
+        self.assertTrue(state["channels"]["mouth_open"]["fired"])
+
+    def test_legacy_wink_key_keeps_carrying_which_eye_winked(self) -> None:
+        state = self._fired()
+        self.assertEqual(state["wink"]["eye"], state["channels"]["wink"]["eye"])
+
+    def test_losing_tracking_clears_every_channel(self) -> None:
+        state = machine()
+        self._fired()
+        lost = state.update(nose=None, features={}, tracking_valid=False)
+        for view in lost["channels"].values():
+            self.assertFalse(view["active"])
+            self.assertFalse(view["fired"])
+
+    def test_state_publishes_the_map_it_was_computed_under(self) -> None:
+        self.assertEqual(self._fired()["bindings"], default_bindings().as_dict())
+
+    def test_machine_defaults_to_the_shipped_bindings(self) -> None:
+        self.assertEqual(ControlStateMachine().bindings.as_dict(), default_bindings().as_dict())
+
+    def test_rebinding_is_reflected_in_the_published_map(self) -> None:
+        state = ControlStateMachine(bindings=default_bindings().rebound("SHOOT", "wink"))
+        state.calibrate(CENTER)
+        published = state.update(nose=CENTER, features=NEUTRAL, tracking_valid=True)["bindings"]
+        self.assertEqual(published, {"SHOOT": "wink"})
+
+    def test_rebinding_does_not_change_which_channels_are_measured(self) -> None:
+        """Detection is binding-independent: a drill watches unbound channels."""
+
+        state = ControlStateMachine(bindings=default_bindings().rebound("SHOOT", "wink"))
+        state.calibrate(CENTER)
+        result = state.update(
+            nose=CENTER, features={**NEUTRAL, "mouth_opening": 0.2}, tracking_valid=True
+        )
+        self.assertTrue(result["channels"]["mouth_open"]["fired"])
 
 
 if __name__ == "__main__":

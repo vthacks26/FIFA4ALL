@@ -15,6 +15,7 @@ from output.keyboard import (
     probe_key_output,
 )
 from output.session import MOVEMENT_KEYS, PASS_KEY, SHOOT_KEY, TAP_SECONDS, InputSession
+from tracking.bindings import ACTIONS, default_bindings
 
 
 def state(
@@ -246,6 +247,82 @@ class SafetyTests(unittest.TestCase):
         keyboard.reset()
         session.release_all()
         self.assertEqual(keyboard.events, [])
+
+
+def bound_state(
+    *,
+    channel: str,
+    active: bool = False,
+    fired: bool = False,
+    tracking: bool = True,
+) -> dict[str, object]:
+    """A control state in the generic shape the state machine now emits."""
+
+    views = {name: {"active": False, "fired": False} for name in ("mouth_open", "wink")}
+    views[channel] = {"active": active, "fired": fired}
+    return {"keys": [], "channels": views, "tracking": tracking}
+
+
+class BindingDrivenOutputTests(unittest.TestCase):
+    """The key and the hold-vs-tap rule come from the action table, not here."""
+
+    def test_session_defaults_to_the_shipped_bindings(self) -> None:
+        self.assertEqual(
+            InputSession(RecordingKeyboard()).bindings.as_dict(), default_bindings().as_dict()
+        )
+
+    def test_keys_are_taken_from_the_action_table(self) -> None:
+        self.assertEqual(SHOOT_KEY, ACTIONS["SHOOT"].key)
+        self.assertEqual(PASS_KEY, ACTIONS["PASS"].key)
+
+    def test_generic_channel_view_drives_shoot_without_the_legacy_key(self) -> None:
+        session, keyboard = armed()
+        session.apply(bound_state(channel="mouth_open", active=True), now=0.0)
+        self.assertIn(SHOOT_KEY, keyboard.held)
+
+    def test_generic_channel_view_drives_pass_without_the_legacy_key(self) -> None:
+        session, keyboard = armed()
+        session.apply(bound_state(channel="wink", fired=True), now=0.0)
+        self.assertIn(PASS_KEY, keyboard.held)
+
+    def test_rebound_shoot_holds_space_from_its_new_channel(self) -> None:
+        keyboard = RecordingKeyboard()
+        session = InputSession(keyboard, bindings=default_bindings().rebound("SHOOT", "wink"))
+        session.arm()
+        session.apply(bound_state(channel="wink", active=True), now=0.0)
+        self.assertIn(SHOOT_KEY, keyboard.held)
+
+    def test_rebound_shoot_ignores_the_channel_it_left(self) -> None:
+        keyboard = RecordingKeyboard()
+        session = InputSession(keyboard, bindings=default_bindings().rebound("SHOOT", "wink"))
+        session.arm()
+        session.apply(bound_state(channel="mouth_open", active=True), now=0.0)
+        self.assertNotIn(SHOOT_KEY, keyboard.held)
+
+    def test_a_tap_action_moved_onto_another_channel_still_taps_once(self) -> None:
+        keyboard = RecordingKeyboard()
+        session = InputSession(keyboard, bindings=default_bindings().rebound("PASS", "mouth_open"))
+        session.arm()
+        session.apply(bound_state(channel="mouth_open", fired=True), now=0.0)
+        session.apply(bound_state(channel="mouth_open", active=True), now=0.01)
+        self.assertEqual(keyboard.events.count(("down", PASS_KEY)), 1)
+
+    def test_an_unbound_action_presses_nothing(self) -> None:
+        """`rebound` leaves the displaced action unbound until it is rebound."""
+
+        keyboard = RecordingKeyboard()
+        session = InputSession(keyboard, bindings=default_bindings().rebound("SHOOT", "wink"))
+        session.arm()
+        session.apply(bound_state(channel="wink", active=True, fired=True), now=0.0)
+        self.assertNotIn(PASS_KEY, keyboard.held)
+
+    def test_legacy_state_shape_still_drives_both_actions(self) -> None:
+        """The pre-Phase-1 wire shape has no `channels`; it must still play."""
+
+        session, keyboard = armed()
+        session.apply(state(mouth=True, wink_fired=True), now=0.0)
+        self.assertIn(SHOOT_KEY, keyboard.held)
+        self.assertIn(PASS_KEY, keyboard.held)
 
 
 if __name__ == "__main__":

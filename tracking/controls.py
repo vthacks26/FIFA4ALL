@@ -15,7 +15,20 @@ from math import atan2, degrees, hypot
 from time import monotonic
 from typing import Literal, Mapping
 
+from tracking.bindings import BindingMap, default_bindings
+
 Direction = Literal["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+
+# The state contract shipped with one top-level key per gesture, named after the
+# gesture rather than after its channel. The frontend and `output.session` still
+# read those names, so `_state` publishes each channel under both its channel
+# name and its legacy alias. Phase 2 moves the last reader onto the channel view
+# and this mapping goes away with it; until then the two must never diverge,
+# which is why the alias is the same object, not a copy.
+LEGACY_CHANNEL_KEYS: Mapping[str, str] = {
+    "mouth_open": "mouth",
+    "wink": "wink",
+}
 
 # Screen-space note: the camera image is mirrored for the user, so a nose offset
 # toward increasing image x means the user moved to their own left -> "A".
@@ -184,6 +197,12 @@ class ControlStateMachine:
     """Turn smoothed face features into the UI/input control state contract."""
 
     thresholds: ControlThresholds = field(default_factory=ControlThresholds)
+    # Which channel drives which action. Detection does not depend on it - every
+    # channel is measured every frame whether or not it is bound, because an
+    # orientation drill has to watch a gesture before it owns an action. The map
+    # rides along so that everything reading the stream resolves action ->
+    # channel against the same bindings the machine is running under.
+    bindings: BindingMap = field(default_factory=default_bindings)
     center: tuple[float, float] | None = None
     mouth_rest: float | None = None
     eye_rest: float | None = None
@@ -393,17 +412,10 @@ class ControlStateMachine:
     ) -> dict[str, object]:
         direction = self._direction
         keys = list(DIRECTION_KEYS[direction]) if direction is not None else []
-        return {
-            "centered": direction is None,
-            "nose": {"x": round(offset[0], 4), "y": round(offset[1], 4)},
-            # Absolute positions in the mirrored camera image, so the overlay
-            # can put the ball on the actual nose rather than in the middle of
-            # the frame.
-            "nose_point": _point(nose_point),
-            "center_point": _point(self.center),
-            "direction": direction,
-            "keys": keys,
-            "mouth": {
+        # Built once and shared, so the channel view and the legacy alias below
+        # can never report different values for the same gesture.
+        channels: dict[str, object] = {
+            "mouth_open": {
                 "active": self._mouth.latched,
                 "fired": mouth_fired,
                 "value": mouth_value,
@@ -418,9 +430,29 @@ class ControlStateMachine:
                 "held_seconds": round(self._wink.held_seconds(now), 3),
                 "eye": self._wink_eye,
             },
+        }
+        state: dict[str, object] = {
+            "centered": direction is None,
+            "nose": {"x": round(offset[0], 4), "y": round(offset[1], 4)},
+            # Absolute positions in the mirrored camera image, so the overlay
+            # can put the ball on the actual nose rather than in the middle of
+            # the frame.
+            "nose_point": _point(nose_point),
+            "center_point": _point(self.center),
+            "direction": direction,
+            "keys": keys,
+            # Every measured gesture, keyed by channel name. A drill reads the
+            # channel it is watching without knowing which action owns it.
+            "channels": channels,
+            # The map the caller should resolve actions against, published with
+            # the frame it applied to so a rebind can never be read a frame late.
+            "bindings": self.bindings.as_dict(),
             "tracking": tracking,
             "recentred": self.recentred,
         }
+        for channel_name, legacy_key in LEGACY_CHANNEL_KEYS.items():
+            state[legacy_key] = channels[channel_name]
+        return state
 
 
 ZONE_CENTERS: Mapping[Direction, float] = {
