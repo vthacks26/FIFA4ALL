@@ -180,6 +180,10 @@ ALLOWED_ORIGINS = frozenset(
         "http://127.0.0.1:5173",
         "http://localhost:4173",
         "http://127.0.0.1:4173",
+        # Same process serves the built UI here. The original onboarding
+        # camera <img> always requested http://127.0.0.1:8765/stream.mjpg.
+        "http://localhost:8765",
+        "http://127.0.0.1:8765",
     }
 )
 

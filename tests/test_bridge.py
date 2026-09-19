@@ -8,6 +8,7 @@ import unittest
 import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
+from time import sleep
 
 from bridge.server import build_server
 from bridge.source import MockSource
@@ -214,6 +215,18 @@ class BridgeServerTests(unittest.TestCase):
             self.assertEqual(
                 response.headers.get("Access-Control-Allow-Origin"),
                 "http://localhost:5173",
+            )
+
+    def test_served_ui_origin_can_read_the_camera_stream(self) -> None:
+        """Original CameraFrame always fetched http://127.0.0.1:8765/stream.mjpg."""
+
+        request = urllib.request.Request(
+            self.url("/config"), headers={"Origin": "http://127.0.0.1:8765"}
+        )
+        with urllib.request.urlopen(request, timeout=5) as response:
+            self.assertEqual(
+                response.headers.get("Access-Control-Allow-Origin"),
+                "http://127.0.0.1:8765",
             )
 
     def test_requests_without_an_origin_still_work(self) -> None:
@@ -476,6 +489,90 @@ class OverlayStaysSeparateTests(unittest.TestCase):
         self.assertIn('"RESET"', overlay)
         self.assertIn('"NO FACE"', overlay)
         self.assertIn('"FIFA4ALL"', overlay)
+
+
+class OrientationCameraFeedTests(unittest.TestCase):
+    """The first website push showed MJPEG in CameraFrame during calibration."""
+
+    def test_webcam_source_tells_the_ui_it_has_video(self) -> None:
+        from bridge.server import build_server
+        from bridge.source import WebcamSource
+
+        source = WebcamSource()
+        server, _hub = build_server(source, port=0)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            port = server.server_address[1]
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/config", timeout=5) as response:
+                self.assertTrue(json.loads(response.read())["has_video"])
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_mjpeg_endpoint_publishes_jpeg_bytes(self) -> None:
+        from bridge.server import build_server
+        from bridge.source import ControlSource
+
+        jpeg = b"\xff\xd8\xff\xd9"
+
+        class JpegSource(ControlSource):
+            def frames(self):
+                while True:
+                    sleep(0.01)
+                    yield ({"tracking": True, "centered": True}, jpeg)
+
+        source = JpegSource()
+        server, hub = build_server(source, port=0)
+        hub.start()
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            port = server.server_address[1]
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{port}/stream.mjpg", timeout=5
+            ) as response:
+                self.assertIn("multipart/x-mixed-replace", response.headers.get("Content-Type", ""))
+                blob = response.read(256)
+            self.assertIn(jpeg, blob)
+            self.assertIn(b"Content-Type: image/jpeg", blob)
+        finally:
+            hub.stop()
+            server.shutdown()
+            server.server_close()
+
+    def test_camera_frame_still_uses_the_original_mjpeg_path(self) -> None:
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parent.parent
+        frame = (root / "onboarding" / "src" / "components" / "CameraFrame.tsx").read_text(
+            encoding="utf-8"
+        )
+        center = (root / "onboarding" / "src" / "screens" / "Center.tsx").read_text(
+            encoding="utf-8"
+        )
+        source = (root / "onboarding" / "src" / "control" / "source.ts").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("${BRIDGE_URL}/stream.mjpg", frame)
+        self.assertIn("hasVideo={config.has_video}", center)
+        self.assertIn('"http://127.0.0.1:8765"', source)
+        self.assertNotIn("getUserMedia", frame)
+
+    def test_reticle_spans_the_frame_so_it_cannot_cover_the_feed(self) -> None:
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parent.parent
+        reticle = (root / "onboarding" / "src" / "components" / "Reticle.tsx").read_text(
+            encoding="utf-8"
+        )
+        css = (root / "onboarding" / "src" / "components" / "Reticle.css").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("viewBox={`0 0 ${width} ${height}`}", reticle)
+        self.assertIn(".reticle *", css)
+        self.assertNotIn(".reticle svg *", css)
+        self.assertNotIn("width: 0", css)
 
 
 class WebcamCalibrateTests(unittest.TestCase):
