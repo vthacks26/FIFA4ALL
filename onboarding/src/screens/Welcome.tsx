@@ -1,5 +1,6 @@
 /** Screen 1 - Welcome. Sets the tone: training camp, not a settings page. */
 
+import { ArrowIcon } from "../components/icons";
 import { Logo } from "../components/Logo";
 import { Player } from "../components/Player";
 import "./Welcome.css";
@@ -25,7 +26,7 @@ export function Welcome({ onStart }: WelcomeProps) {
         <p className="welcome__prompt">Ready for training camp?</p>
         <button className="btn btn--primary" onClick={onStart} type="button">
           Start Training
-          <span aria-hidden="true">&rarr;</span>
+          <ArrowIcon />
         </button>
       </div>
 

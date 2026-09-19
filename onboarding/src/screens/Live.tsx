@@ -12,6 +12,7 @@ import { CameraFrame } from "../components/CameraFrame";
 import { ConfidenceBar } from "../components/ConfidenceBar";
 import { Logo } from "../components/Logo";
 import { MatchStatus } from "../components/MatchStatus";
+import { IconBadge, MoveIcon, PassIcon, ShootIcon } from "../components/icons";
 import type { ControlChannel } from "../control/useControlState";
 import { FULL_SHOT_SECONDS, type MovementKey } from "../types";
 import "./Live.css";
@@ -59,6 +60,9 @@ export function Live({ channel, onRestart }: LiveProps) {
         <div className="live__panels">
           <article className={`live-row ${state.direction !== null ? "is-active" : ""}`}>
             <div className="live-row__head">
+              <IconBadge tone="lime" size={40} active={state.direction !== null}>
+                <MoveIcon size={22} active={state.direction !== null} />
+              </IconBadge>
               <span className="live-row__name">Move</span>
               <span className="live-row__gesture">Head movement</span>
             </div>
@@ -83,6 +87,9 @@ export function Live({ channel, onRestart }: LiveProps) {
 
           <article className={`live-row live-row--amber ${state.mouth.active ? "is-active" : ""}`}>
             <div className="live-row__head">
+              <IconBadge tone="amber" size={40} active={state.mouth.active}>
+                <ShootIcon size={22} active={state.mouth.active} />
+              </IconBadge>
               <span className="live-row__name">Shoot</span>
               <span className="live-row__gesture">Mouth open</span>
             </div>
@@ -104,6 +111,9 @@ export function Live({ channel, onRestart }: LiveProps) {
 
           <article className={`live-row live-row--purple ${state.wink.active ? "is-active" : ""}`}>
             <div className="live-row__head">
+              <IconBadge tone="purple" size={40} active={state.wink.active}>
+                <PassIcon size={22} active={state.wink.active} />
+              </IconBadge>
               <span className="live-row__name">Pass</span>
               <span className="live-row__gesture">Wink</span>
             </div>

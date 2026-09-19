@@ -2,37 +2,28 @@
 
 import { useEffect, useState } from "react";
 
-import { Ball } from "../components/Ball";
-import { Player } from "../components/Player";
+import { IconBadge, MoveIcon, PassIcon, ShootIcon, ArrowIcon } from "../components/icons";
+import type { IconTone } from "../components/icons";
 import "./Controls.css";
 
 interface ControlsProps {
   readonly onNext: () => void;
 }
 
-const CARDS = [
-  {
-    id: "move",
-    tone: "lime",
-    title: "Move",
-    gesture: "Head movement",
-    keys: "W A S D",
-  },
-  {
-    id: "shoot",
-    tone: "amber",
-    title: "Shoot",
-    gesture: "Open mouth",
-    keys: "Space",
-  },
-  {
-    id: "pass",
-    tone: "purple",
-    title: "Pass",
-    gesture: "Wink",
-    keys: "L",
-  },
-] as const;
+interface Card {
+  readonly id: string;
+  readonly tone: IconTone;
+  readonly title: string;
+  readonly gesture: string;
+  readonly keys: string;
+  readonly Icon: typeof MoveIcon;
+}
+
+const CARDS: readonly Card[] = [
+  { id: "move", tone: "lime", title: "Move", gesture: "Head movement", keys: "W A S D", Icon: MoveIcon },
+  { id: "shoot", tone: "amber", title: "Shoot", gesture: "Open mouth", keys: "Space", Icon: ShootIcon },
+  { id: "pass", tone: "purple", title: "Pass", gesture: "Wink", keys: "L", Icon: PassIcon },
+];
 
 export function Controls({ onNext }: ControlsProps) {
   // Each control animates in sequence, then the demo loops.
@@ -64,7 +55,11 @@ export function Controls({ onNext }: ControlsProps) {
             className={`control-card control-card--${card.tone} ${step === index ? "is-active" : ""}`}
             style={{ animationDelay: `${index * 0.14}s` }}
           >
-            <div className="control-card__art">{renderArt(card.id, step === index)}</div>
+            <div className="control-card__art">
+              <IconBadge tone={card.tone} size={92} active={step === index}>
+                <card.Icon size={48} active={step === index} />
+              </IconBadge>
+            </div>
             <h2 className="control-card__title">{card.title}</h2>
             <p className="control-card__gesture">{card.gesture}</p>
             <span className="control-card__keys">{card.keys}</span>
@@ -75,41 +70,10 @@ export function Controls({ onNext }: ControlsProps) {
       <footer className="controls__footer">
         <button className="btn btn--primary" onClick={onNext} type="button">
           Let&rsquo;s Practice
-          <span aria-hidden="true">&rarr;</span>
+          <ArrowIcon />
         </button>
       </footer>
     </section>
   );
 }
 
-function renderArt(id: (typeof CARDS)[number]["id"], active: boolean) {
-  if (id === "move") {
-    return (
-      <div className={`art art--move ${active ? "is-playing" : ""}`}>
-        <div className="art__ring" />
-        <div className="art__orbit">
-          <Ball size={26} spin={active} />
-        </div>
-      </div>
-    );
-  }
-  if (id === "shoot") {
-    return (
-      <div className={`art art--shoot ${active ? "is-playing" : ""}`}>
-        <Player pose={active ? "shoot" : "idle"} kit="amber" size={92} />
-        <div className="art__shot">
-          <Ball size={20} spin={active} />
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className={`art art--pass ${active ? "is-playing" : ""}`}>
-      <Player pose={active ? "pass" : "idle"} kit="purple" size={80} />
-      <div className="art__pass-ball">
-        <Ball size={18} spin={active} />
-      </div>
-      <Player pose={active ? "receive" : "idle"} kit="teal" size={72} skin="#8d5524" />
-    </div>
-  );
-}

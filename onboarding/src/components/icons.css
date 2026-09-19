@@ -1,0 +1,111 @@
+/* One stroke system across every icon, so they read as a set. */
+.icon {
+  display: block;
+  overflow: visible;
+}
+
+.icon path,
+.icon circle {
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon__dot {
+  fill: currentColor;
+  stroke: none;
+}
+
+/* ---- move: arrows push outward in turn ---- */
+.icon--move.is-active .icon__arrow {
+  animation: arrow-push 1.6s ease-in-out infinite;
+}
+
+.icon--move.is-active .icon__arrow--n { animation-delay: 0s; }
+.icon--move.is-active .icon__arrow--e { animation-delay: 0.4s; }
+.icon--move.is-active .icon__arrow--s { animation-delay: 0.8s; }
+.icon--move.is-active .icon__arrow--w { animation-delay: 1.2s; }
+
+@keyframes arrow-push {
+  0%, 70%, 100% { opacity: 0.45; }
+  20%, 40% { opacity: 1; }
+}
+
+/* ---- shoot: the mouth opens wider ---- */
+.icon__mouth-open {
+  fill: currentColor;
+  fill-opacity: 0.28;
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  transform: scaleY(0.6);
+  transition: transform 0.2s var(--pop), fill-opacity 0.2s var(--snap);
+}
+
+.icon__lip {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  transition: transform 0.2s var(--snap);
+}
+
+.icon--shoot.is-active .icon__mouth-open {
+  transform: scaleY(1);
+  fill-opacity: 0.5;
+}
+
+.icon--shoot.is-active .icon__lip--upper {
+  transform: translateY(-1.5px);
+}
+
+.icon--shoot.is-active .icon__lip--lower {
+  transform: translateY(1.5px);
+}
+
+/* ---- pass: the lid closes ---- */
+.icon__eye-shut {
+  opacity: 0;
+}
+
+.icon__brow {
+  opacity: 0.75;
+}
+
+.icon--pass.is-active .icon__eye-open {
+  opacity: 0;
+}
+
+.icon--pass.is-active .icon__eye-shut {
+  opacity: 1;
+}
+
+.icon__pupil {
+  fill: currentColor;
+}
+
+.icon--arrow path {
+  stroke-width: 2.4;
+}
+
+/* ---- badge ---- */
+.icon-badge {
+  --tone: var(--lime);
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 13%, transparent);
+  border: 2px solid color-mix(in srgb, var(--tone) 45%, transparent);
+  transition: background 0.2s var(--snap), border-color 0.2s var(--snap),
+    box-shadow 0.2s var(--snap), transform 0.2s var(--pop);
+}
+
+.icon-badge--amber { --tone: var(--amber); }
+.icon-badge--purple { --tone: var(--purple); }
+.icon-badge--teal { --tone: var(--teal); }
+
+.icon-badge.is-active {
+  background: color-mix(in srgb, var(--tone) 26%, transparent);
+  border-color: var(--tone);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--tone) 42%, transparent);
+  transform: scale(1.06);
+}

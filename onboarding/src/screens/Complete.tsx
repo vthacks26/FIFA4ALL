@@ -1,5 +1,6 @@
 /** Screen 7 - Training complete. Player card makes the controls memorable. */
 
+import { ArrowIcon, MoveIcon, PassIcon, ShootIcon } from "../components/icons";
 import { Logo } from "../components/Logo";
 import { Player } from "../components/Player";
 import type { ControlChannel } from "../control/useControlState";
@@ -11,9 +12,9 @@ interface CompleteProps {
 }
 
 const MAPPINGS = [
-  { gesture: "Head movement", action: "Run", keys: "W A S D" },
-  { gesture: "Open mouth", action: "Shoot", keys: "Space" },
-  { gesture: "Wink", action: "Pass", keys: "L" },
+  { gesture: "Head movement", action: "Run", keys: "W A S D", Icon: MoveIcon },
+  { gesture: "Open mouth", action: "Shoot", keys: "Space", Icon: ShootIcon },
+  { gesture: "Wink", action: "Pass", keys: "L", Icon: PassIcon },
 ] as const;
 
 export function Complete({ channel, onNext }: CompleteProps) {
@@ -41,7 +42,10 @@ export function Complete({ channel, onNext }: CompleteProps) {
           <dl className="player-card__stats">
             {MAPPINGS.map((row) => (
               <div className="player-card__stat" key={row.gesture}>
-                <dt>{row.gesture}</dt>
+                <dt>
+                  <row.Icon size={16} />
+                  {row.gesture}
+                </dt>
                 <dd>
                   {row.action} <span>{row.keys}</span>
                 </dd>
@@ -65,7 +69,7 @@ export function Complete({ channel, onNext }: CompleteProps) {
           <p className="complete__tagline">Different bodies. Same pitch.</p>
           <button className="btn btn--primary" onClick={onNext} type="button">
             Ready for Kickoff
-            <span aria-hidden="true">&rarr;</span>
+            <ArrowIcon />
           </button>
         </div>
       </div>
