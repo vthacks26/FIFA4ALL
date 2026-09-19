@@ -15,7 +15,7 @@ from math import atan2, degrees, hypot
 from time import monotonic
 from typing import Literal, Mapping
 
-from tracking.bindings import BindingMap, default_bindings
+from tracking.bindings import CHANNELS, BindingMap, GestureChannel, default_bindings
 
 Direction = Literal["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
 
@@ -93,6 +93,20 @@ class ControlThresholds:
     eye_open_fraction: float = 0.65
     # Used until calibration measures the user. Typical open eye reads ~0.10.
     eye_open_floor: float = 0.070
+    # Head pitch moves the brow-to-eye gap by a few percent on its own, and
+    # pitching is not idle fidgeting in this game: it is the N/S steering axis
+    # of the nose joystick. A brow raise is only accepted while pitch is within
+    # this much of the value measured for this user at calibration, so steering
+    # cannot trip it.
+    pitch_level_band: float = 0.060
+    # The chin sits further from the axis of rotation than the nose tip, so a
+    # head turn leaves a residual lateral chin offset in the direction of the
+    # turn. A jaw slide is only accepted while the head is this close to
+    # forward. Expressed in head_turn units, which measure the nose against the
+    # cheek midpoint -- deliberately NOT reusing enter_radius, which measures a
+    # different thing (nose offset from the calibrated centre) and would be a
+    # silent unit error.
+    facing_forward_turn: float = 0.060
     dwell_seconds: float = 1.0
 
     def __post_init__(self) -> None:
@@ -110,6 +124,10 @@ class ControlThresholds:
             raise ValueError("wink_off must be below wink_on")
         if not 0.0 < self.eye_open_fraction < 1.0:
             raise ValueError("eye_open_fraction must be between 0 and 1")
+        if self.pitch_level_band <= 0:
+            raise ValueError("pitch_level_band must be positive")
+        if self.facing_forward_turn <= 0:
+            raise ValueError("facing_forward_turn must be positive")
         if self.eye_open_floor <= 0:
             raise ValueError("eye_open_floor must be positive")
         if self.y_scale <= 0:
@@ -139,6 +157,8 @@ class ControlThresholds:
             "wink_off": self.wink_off,
             "eye_open_fraction": self.eye_open_fraction,
             "eye_open_floor": self.eye_open_floor,
+            "pitch_level_band": self.pitch_level_band,
+            "facing_forward_turn": self.facing_forward_turn,
             "dwell_seconds": self.dwell_seconds,
         }
 
@@ -213,12 +233,23 @@ class ControlStateMachine:
     _still_since: float | None = None
     _still_anchor: tuple[float, float] | None = None
     _wink_eye: str | None = None
+    pitch_rest: float | None = None
     _mouth: _EdgeTrigger = field(init=False)
     _wink: _EdgeTrigger = field(init=False)
+    _extra: dict[str, _EdgeTrigger] = field(init=False)
 
     def __post_init__(self) -> None:
         self._mouth = _EdgeTrigger(self.thresholds.mouth_open, self.thresholds.mouth_reset)
         self._wink = _EdgeTrigger(self.thresholds.wink_on, self.thresholds.wink_off)
+        # Every other registered channel gets a trigger built from its own
+        # declared thresholds. Channels are measured whether or not they are
+        # bound, because orientation has to see a gesture nobody selected yet
+        # in order to offer it.
+        self._extra = {
+            name: _EdgeTrigger(channel.default_on, channel.default_off)
+            for name, channel in CHANNELS.items()
+            if name not in ("mouth_open", "wink")
+        }
 
     def calibrate(
         self,
@@ -226,6 +257,7 @@ class ControlStateMachine:
         *,
         mouth_rest: float | None = None,
         eye_rest: float | None = None,
+        pitch_rest: float | None = None,
     ) -> None:
         """Set the neutral centre, and optionally the resting mouth baseline.
 
@@ -240,6 +272,8 @@ class ControlStateMachine:
             self._apply_mouth_thresholds()
         if eye_rest is not None:
             self.eye_rest = eye_rest
+        if pitch_rest is not None:
+            self.pitch_rest = pitch_rest
         self._moving = False
         self._direction = None
         self._still_since = None
@@ -270,6 +304,10 @@ class ControlStateMachine:
             self._wink_eye = None
             self._mouth.update(None, moment)
             self._wink.update(None, moment)
+            lost = {
+                name: self._channel_state(CHANNELS[name], {}, moment, tracking=False)
+                for name in self._extra
+            }
             return self._state(
                 offset=(0.0, 0.0),
                 nose_point=None,
@@ -279,6 +317,7 @@ class ControlStateMachine:
                 wink_fired=False,
                 tracking=False,
                 now=moment,
+                extra_channels=lost,
             )
 
         if self.center is None:
@@ -309,6 +348,10 @@ class ControlStateMachine:
         )
         _, mouth_fired = self._mouth.update(mouth_value, moment)
         _, wink_fired = self._wink.update(wink_value, moment)
+        extra = {
+            name: self._channel_state(CHANNELS[name], features, moment, tracking=True)
+            for name in self._extra
+        }
 
         return self._state(
             offset=offset,
@@ -319,6 +362,7 @@ class ControlStateMachine:
             wink_fired=wink_fired,
             tracking=True,
             now=moment,
+            extra_channels=extra,
         )
 
     def _update_movement(self, offset: tuple[float, float]) -> None:
@@ -348,6 +392,78 @@ class ControlStateMachine:
             self.thresholds.eye_open_floor * 0.5,
             self.eye_rest * self.thresholds.eye_open_fraction,
         )
+
+    def gate_passes(self, channel: GestureChannel, features: Mapping[str, float]) -> bool:
+        """Whether a channel's confound gate allows it to fire this frame.
+
+        A gate answers one question: could this reading be the channel's known
+        confound rather than the gesture? When the gate cannot be evaluated --
+        a missing feature, or a baseline this player never calibrated -- the
+        answer is no. Firing on an unevaluable gate would hand the player an
+        action that triggers itself, which is the failure this whole mechanism
+        exists to prevent.
+        """
+
+        gate = channel.gate
+        if gate is None:
+            return True
+        if gate == "one_eye_open":
+            # A blink closes both lids together; a wink leaves one eye open.
+            return self._one_eye_still_open(features)
+        if gate == "head_level":
+            pitch = features.get("head_pitch")
+            if pitch is None or self.pitch_rest is None:
+                return False
+            return abs(pitch - self.pitch_rest) <= self.thresholds.pitch_level_band
+        if gate == "mouth_near_rest":
+            mouth = features.get("mouth_opening")
+            if mouth is None:
+                return False
+            # Reuse the shoot release threshold rather than inventing another
+            # number: a mouth open enough to still be holding a shot is by
+            # definition not a resting mouth, so it cannot also be a smile.
+            return mouth <= self._mouth.off_value
+        if gate == "facing_forward":
+            turn = features.get("head_turn")
+            if turn is None:
+                return False
+            return abs(turn) <= self.thresholds.facing_forward_turn
+        # An unknown gate is a programming error, not a runtime condition.
+        # Passing it silently would ship a channel with no guard at all.
+        raise ValueError(f"unknown confound gate: {gate!r} on channel {channel.name!r}")
+
+    def _channel_state(
+        self,
+        channel: GestureChannel,
+        features: Mapping[str, float],
+        now: float,
+        *,
+        tracking: bool,
+    ) -> dict[str, object]:
+        """Measure one registered channel and advance its trigger."""
+
+        trigger = self._extra[channel.name]
+        if not tracking:
+            trigger.update(None, now)
+            return _channel_view(trigger, value=None, fired=False, gated=False, now=now)
+
+        missing = any(features.get(name) is None for name in channel.required_features)
+        if missing:
+            # A landmark this channel needs is absent. Release rather than read
+            # a missing measurement as a resting value.
+            trigger.update(None, now)
+            return _channel_view(trigger, value=None, fired=False, gated=False, now=now)
+
+        raw = features.get(channel.feature)
+        value = None if raw is None else (abs(raw) if channel.use_magnitude else raw)
+        gated = not self.gate_passes(channel, features)
+        if gated:
+            # The gate rejected this frame, so the reading may be the confound.
+            # Drive the trigger to release; the UI is told why below.
+            trigger.update(None, now)
+            return _channel_view(trigger, value=value, fired=False, gated=True, now=now)
+        _, fired = trigger.update(value, now)
+        return _channel_view(trigger, value=value, fired=fired, gated=False, now=now)
 
     def _one_eye_still_open(self, features: Mapping[str, float]) -> bool:
         """True when one eye is clearly open, which a blink never satisfies."""
@@ -409,6 +525,7 @@ class ControlStateMachine:
         wink_fired: bool,
         tracking: bool,
         now: float,
+        extra_channels: Mapping[str, dict[str, object]] | None = None,
     ) -> dict[str, object]:
         direction = self._direction
         keys = list(DIRECTION_KEYS[direction]) if direction is not None else []
@@ -431,6 +548,9 @@ class ControlStateMachine:
                 "eye": self._wink_eye,
             },
         }
+        # Channels beyond the original two, measured the same way and merged in
+        # so a drill can read any of them by name.
+        channels.update(extra_channels or {})
         state: dict[str, object] = {
             "centered": direction is None,
             "nose": {"x": round(offset[0], 4), "y": round(offset[1], 4)},
@@ -467,6 +587,31 @@ def _within_zone(offset: tuple[float, float], direction: Direction, margin: floa
     angle = degrees(atan2(-offset[1], offset[0])) % 360.0
     delta = abs((angle - ZONE_CENTERS[direction] + 180.0) % 360.0 - 180.0)
     return delta <= 22.5 + margin
+
+
+def _channel_view(
+    trigger: _EdgeTrigger,
+    *,
+    value: float | None,
+    fired: bool,
+    gated: bool,
+    now: float,
+) -> dict[str, object]:
+    """One channel's slice of the state contract.
+
+    `gated` is published so the UI can say why a gesture it can plainly see is
+    not firing, for example that the player is mid-turn. Without it a gated
+    channel looks identical to a broken one.
+    """
+
+    return {
+        "active": trigger.latched,
+        "fired": fired,
+        "value": value,
+        "confidence": 0.0 if gated else _confidence(value, trigger.on_value),
+        "held_seconds": round(trigger.held_seconds(now), 3),
+        "gated": gated,
+    }
 
 
 def _point(value: tuple[float, float] | None) -> dict[str, float] | None:
