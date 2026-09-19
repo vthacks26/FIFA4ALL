@@ -45,7 +45,7 @@
 /* Grid stacking rather than absolute positioning: both frames occupy the same
    cell, so they stay centred and bottom-aligned without needing a transform of
    their own, which the bounce animation already owns. */
-.player--run:has(.player__sprite--stride-a) {
+.player--run {
   display: grid;
   /* The row must be sized explicitly. A content-sized row makes the sprites'
      `height: 100%` resolve to auto, so they render at their natural 900px and
@@ -87,14 +87,6 @@
   100% {
     opacity: 1;
   }
-}
-
-/* The back view has no stride pair, so it keeps the bounce on its own. */
-.player--run
-  .player__sprite:not(.player__sprite--stride-a):not(
-    .player__sprite--stride-b
-  ) {
-  animation: player-run 0.34s ease-in-out infinite;
 }
 
 @keyframes player-run {

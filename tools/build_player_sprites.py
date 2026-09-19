@@ -18,11 +18,13 @@ ALPHA_FLOOR = 16
 # is 300px, so 600 is exactly retina-sharp; the raw 1024x1536 frames are three
 # times more than any display needs and cost 15MB across the cast.
 IDLE_HEIGHT = 600
-POSES = ["idle", "run", "runb", "shoot", "pass", "celebrate", "back"]
+POSES = ["idle", "run", "runb", "shoot", "pass", "celebrate", "back", "backrun", "backrunb"]
 KITS = ["teal", "crimson", "lime", "amber", "slate", "purple"]
-# A missing pose reuses this frame from the same kit.
+# A missing pose reuses this frame from the same kit. Chains resolve, so a kit
+# with no rear run frames degrades backrunb -> backrun -> back -> idle.
 FALLBACK = {"runb": "run", "back": "idle", "shoot": "idle", "pass": "idle",
-            "celebrate": "idle", "run": "idle"}
+            "celebrate": "idle", "run": "idle",
+            "backrun": "back", "backrunb": "backrun"}
 
 
 def tight(path: str) -> Image.Image:

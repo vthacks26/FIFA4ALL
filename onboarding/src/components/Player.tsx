@@ -77,9 +77,13 @@ export function Player({
   const mirrored = facing !== null && MIRRORED.has(facing);
   const yaw = facing === null ? 0 : YAW[facing];
 
-  // Turning upfield shows the back, which only exists as a standing frame.
+  // Running upfield is the most-used direction in the movement drill, so the
+  // rear view has its own stride pair rather than falling back to the standing
+  // back frame.
+  const running = pose === "run";
   const frame = away ? "back" : FRAME_FOR_POSE[pose];
-  const running = pose === "run" && !away;
+  const strideA = away ? "backrun" : "run";
+  const strideB = away ? "backrunb" : "runb";
 
   return (
     <div
@@ -91,13 +95,13 @@ export function Player({
         <>
           <img
             className="player__sprite player__sprite--stride-a"
-            src={spriteUrl(kit, "run")}
+            src={spriteUrl(kit, strideA)}
             alt=""
             draggable={false}
           />
           <img
             className="player__sprite player__sprite--stride-b"
-            src={spriteUrl(kit, "runb")}
+            src={spriteUrl(kit, strideB)}
             alt=""
             draggable={false}
           />
