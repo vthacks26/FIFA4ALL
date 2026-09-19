@@ -113,11 +113,15 @@ class WebcamSource(ControlSource):
         thresholds: ControlThresholds | None = None,
         *,
         camera_index: int = 0,
+        camera_name: str | None = None,
+        camera_unique_id: str | None = None,
         max_width: int = 640,
         jpeg_quality: int = 70,
     ) -> None:
         super().__init__(thresholds)
         self.camera_index = camera_index
+        self.camera_name = camera_name
+        self.camera_unique_id = camera_unique_id
         self.max_width = max_width
         self.jpeg_quality = jpeg_quality
         self._tracker: Any | None = None
@@ -135,7 +139,12 @@ class WebcamSource(ControlSource):
 
         from tracking.mediapipe_tracker import WebcamFaceTracker
 
-        self._tracker = WebcamFaceTracker(camera_index=self.camera_index, max_width=self.max_width)
+        self._tracker = WebcamFaceTracker(
+            camera_index=self.camera_index,
+            camera_name=self.camera_name,
+            camera_unique_id=self.camera_unique_id,
+            max_width=self.max_width,
+        )
         self._tracker.start()
         encode_params = [int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality]
 

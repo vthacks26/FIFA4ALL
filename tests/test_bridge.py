@@ -193,5 +193,15 @@ class BridgeServerTests(unittest.TestCase):
         return latest
 
 
+    def test_built_orientation_ui_is_served_when_present(self) -> None:
+        from bridge.server import UI_DIST
+
+        if not (UI_DIST / "index.html").is_file():
+            self.skipTest("onboarding/dist is not built")
+        with urllib.request.urlopen(self.url("/"), timeout=5) as response:
+            html = response.read().decode("utf-8")
+        self.assertIn("<div id=\"root\">", html)
+
+
 if __name__ == "__main__":
     unittest.main()

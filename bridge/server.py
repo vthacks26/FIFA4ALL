@@ -19,11 +19,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import mimetypes
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from time import monotonic
-from typing import Any, Callable
+from typing import Any
+from urllib.parse import urlparse
 
 from bridge.source import ControlSource, MockSource, WebcamSource
 from output.focus import frontmost_application, game_has_focus
@@ -32,6 +35,7 @@ from output.session import InputSession
 from tracking.controls import DIRECTION_KEYS
 
 DEFAULT_PORT = 8765
+UI_DIST = Path(__file__).resolve().parent.parent / "onboarding" / "dist"
 
 
 class ControlHub:
@@ -155,7 +159,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
         elif self.path.startswith("/stream.mjpg"):
             self._send_mjpeg()
         else:
-            self._send_json({"error": "not found"}, status=404)
+            self._send_static()
 
     def do_POST(self) -> None:
         if self.path.startswith("/calibrate"):
@@ -242,6 +246,41 @@ class BridgeHandler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             return
 
+    def _send_static(self) -> None:
+        parsed = urlparse(self.path)
+        rel = parsed.path.lstrip("/")
+        root = UI_DIST.resolve()
+        if not rel or rel == "index.html":
+            target = root / "index.html"
+        else:
+            target = (root / rel).resolve()
+            try:
+                target.relative_to(root)
+            except ValueError:
+                self._send_json({"error": "not found"}, status=404)
+                return
+        if not target.is_file():
+            fallback = root / "index.html"
+            if fallback.is_file():
+                target = fallback
+            else:
+                self._send_json(
+                    {
+                        "error": "orientation UI is not built",
+                        "hint": "cd onboarding && npm install && npm run build",
+                    },
+                    status=404,
+                )
+                return
+        data = target.read_bytes()
+        ctype = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+        self.send_response(200)
+        self._cors()
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
 
 class QuietThreadingHTTPServer(ThreadingHTTPServer):
     """HTTP server that does not log a traceback when a client disconnects.
@@ -270,42 +309,69 @@ def build_server(
     return (server, hub)
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="FIFA4ALL orientation bridge server")
-    parser.add_argument("--mock", action="store_true", help="run without a webcam")
-    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
-    parser.add_argument("--camera", type=int, default=0)
-    parser.add_argument(
-        "--overlay",
-        action="store_true",
-        help="float a look-axis window above the game for the player",
-    )
-    args = parser.parse_args()
+def run_product(
+    *,
+    preview: bool,
+    port: int = DEFAULT_PORT,
+    mock: bool = False,
+    armed: bool = True,
+) -> int:
+    """One process: MacBook camera, Quartz holds, overlay, orientation UI."""
 
-    source: ControlSource = MockSource() if args.mock else WebcamSource(camera_index=args.camera)
-    server, hub = build_server(source, args.port)
-    hub.start()
-
-    mode = "mock" if args.mock else "webcam"
-    # Flushed explicitly: stdout is block-buffered when piped to a log file, and
-    # the operator must not miss the permission warning before a demo.
-    banner = [
-        f"FIFA4ALL bridge ({mode}) on http://127.0.0.1:{args.port}",
-        "  /config  /events  /stream.mjpg  POST /calibrate  POST /arm  POST /disarm",
-        "  keyboard output starts DISARMED; arm it from the second monitor",
-    ]
-    problem = QuartzKeyboard.permission_error()
-    if problem is not None:
-        banner += ["", "  keyboard output unavailable:", f"  {problem}", ""]
+    if mock:
+        source: ControlSource = MockSource()
+        session = InputSession(build_keyboard(), armed=False)
+        camera_line = "mock (no camera)"
     else:
-        banner.append("  keyboard output verified: synthetic keys reach macOS")
+        from tracking.mac_camera import (
+            list_avfoundation_devices,
+            select_builtin_mac_camera,
+            skipped_phone_devices,
+        )
+
+        devices = list_avfoundation_devices()
+        listing = ", ".join(f"{d.index}:{d.name!r}" for d in devices) or "(none)"
+        print(f"AVFoundation cameras: {listing}", flush=True)
+        for phone in skipped_phone_devices(devices):
+            print(
+                f"Skipping iPhone/Continuity index={phone.index} name={phone.name!r} "
+                "(will not probe)",
+                flush=True,
+            )
+        try:
+            chosen = select_builtin_mac_camera(devices)
+        except RuntimeError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 2
+        print(
+            f"Using built-in Mac camera index={chosen.index} name={chosen.name!r} "
+            "(refusing iPhone/Continuity; opening this named index only)",
+            flush=True,
+        )
+        source = WebcamSource(
+            camera_index=chosen.index,
+            camera_name=chosen.name,
+            camera_unique_id=chosen.unique_id,
+        )
+        session = InputSession(build_keyboard(), armed=armed)
+        camera_line = f"{chosen.index}:{chosen.name!r}"
+
+    server, hub = build_server(source, port, session)
+    banner = [
+        f"FIFA4ALL live on http://127.0.0.1:{port}/  camera={camera_line}",
+        "  same process: Quartz WASD / Space hold / wink-L hold",
+        "  overlay RESET and POST /calibrate recapture neutral",
+    ]
+    if not mock:
+        banner.append(
+            "  inject starts ARMED; the orientation HUD can disarm without "
+            "opening another camera"
+        )
     print("\n".join(banner), flush=True)
 
-    # The HTTP server is threaded so the capture loop owns the main thread,
-    # which macOS requires for any window drawing.
     threading.Thread(target=server.serve_forever, name="bridge-http", daemon=True).start()
     try:
-        hub.run(on_frame=_build_overlay(hub) if args.overlay else None)
+        hub.run(on_frame=_build_overlay(hub) if preview else None)
     except KeyboardInterrupt:
         print("\nstopping")
     finally:
@@ -314,15 +380,51 @@ def main() -> int:
     return 0
 
 
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="FIFA4ALL live product (alias of python -m tracking.live)"
+    )
+    parser.add_argument("--mock", action="store_true", help="UI-only mock; no webcam")
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    parser.add_argument("--preview", action="store_true")
+    parser.add_argument("--no-preview", action="store_true")
+    parser.add_argument(
+        "--overlay",
+        action="store_true",
+        help="same as --preview (kept for older scripts)",
+    )
+    args = parser.parse_args(argv)
+    preview = (bool(args.preview) or bool(args.overlay)) and not bool(args.no_preview)
+    if args.mock:
+        return run_product(preview=preview, port=args.port, mock=True, armed=False)
+    print(
+        "Starting the live product "
+        f"(python -m tracking.live {'--preview' if preview else '--no-preview'})",
+        flush=True,
+    )
+    return run_product(preview=preview, port=args.port, mock=False, armed=True)
+
+
 def _build_overlay(hub: ControlHub) -> "Callable[[dict[str, object]], None]":
     """Render the player-facing look-axis window, if OpenCV is available."""
 
     import cv2  # type: ignore[import-not-found]
 
-    from bridge.overlay_view import draw_overlay
+    from bridge.overlay_view import draw_overlay, reset_button_rect
     from tracking.overlay import WINDOW_TITLE, decorate_overlay_window, poll_reset_click
 
-    state_box: dict[str, bool] = {"decorated": False}
+    state_box: dict[str, bool] = {"decorated": False, "mouse": False}
+
+    def _on_mouse(event: int, x: int, y: int, *_args: object) -> None:
+        if event != cv2.EVENT_LBUTTONDOWN:
+            return
+        frame = getattr(hub.source, "last_frame", None)
+        if frame is None:
+            return
+        height, width = frame.shape[:2]
+        x1, y1, x2, y2 = reset_button_rect(width, height)
+        if x1 <= x <= x2 and y1 <= y <= y2:
+            hub.source.calibrate()
 
     def render(state: dict[str, object]) -> None:
         source = hub.source
@@ -330,6 +432,9 @@ def _build_overlay(hub: ControlHub) -> "Callable[[dict[str, object]], None]":
         if frame is None:
             return
         cv2.imshow(WINDOW_TITLE, draw_overlay(cv2, frame, state, source.thresholds))
+        if not state_box["mouse"]:
+            cv2.setMouseCallback(WINDOW_TITLE, _on_mouse)
+            state_box["mouse"] = True
         cv2.waitKey(1)
         if not state_box["decorated"]:
             # Must happen after the first imshow, once the window exists.

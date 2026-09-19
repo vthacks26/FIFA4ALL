@@ -22,21 +22,20 @@ the on-screen zones truthful to the input logic.
 
 ## Run it
 
-Two processes. From the repository root:
+The live product already serves this UI. From the repository root:
 
 ```bash
-# 1. tracking bridge (real webcam)
-MPLCONFIGDIR=.cache/matplotlib .venv-mediapipe/bin/python -m bridge.server
-
-# 1b. or with no webcam at all
-.venv-mediapipe/bin/python -m bridge.server --mock
-
-# 2. orientation UI
-cd onboarding && npm install && npm run dev
+MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --preview
 ```
 
-Open http://localhost:5173 on the second monitor. If the bridge is not running
-the UI falls back to simulated input automatically.
+Then open http://127.0.0.1:8765/ on the second monitor. Same MacBook camera,
+Quartz holds, and RESET as the look-axis overlay. Do not start a second camera.
+
+UI-only mock, no webcam:
+
+```bash
+python -m bridge.server --mock
+```
 
 ## Bridge endpoints
 

@@ -17,8 +17,6 @@ This is a VTHacks accessibility hack. The live path in this branch injects macOS
 From a clone of [vthacks26/FIFA4ALL](https://github.com/vthacks26/FIFA4ALL):
 
 ```bash
-git checkout feature/onboarding
-
 python3.12 -m venv .venv-mediapipe
 source .venv-mediapipe/bin/activate
 python -m pip install -r tracking/requirements.txt
@@ -65,7 +63,7 @@ Do not start this from another directory, and do not point OpenCV at Continuity 
 | --- | --- | --- |
 | Nose / head look axis (leave the center deadzone) | `W` `A` `S` `D` | Move |
 | Mouth open | `Space` | Shoot (hold while the mouth stays open) |
-| Left wink | `L` | Pass (hold while the wink is detected) |
+| Wink (either eye; blinks rejected) | `L` | Pass (hold while the wink is detected) |
 
 The first valid nose point after start or Reset is the joystick center. Returning to that center releases WASD. Combinations are allowed (for example look + shoot).
 
@@ -104,34 +102,23 @@ These exist but are **not** the Luna injector:
 | `MPLCONFIGDIR=.cache/matplotlib python -m tracking.diagnostic` | Webcam feature overlay. Press `q` to quit. |
 | `python -m tracking.haar_control_preview` | Lighter OpenCV nose fallback (WASD preview only; no mouth/wink, no Quartz inject). |
 
-More tracking notes: [`tracking/README.md`](tracking/README.md).
+More tracking notes: [`tracking/README.md`](tracking/README.md). Orientation screens: [`onboarding/README.md`](onboarding/README.md).
 
-## Two ways to run
+## One product
 
-Both paths share one tracking pipeline, one set of thresholds, and one
-keyboard output layer. Pick by who is watching.
-
-### Player overlay only
-
-A small look-axis window floats above fullscreen Luna without taking focus.
-Nothing else on screen.
+`python -m tracking.live` is the only match path. The same process owns the
+MacBook camera, Quartz HID holds, the look-axis overlay + RESET, and the
+orientation UI at http://127.0.0.1:8765/ . Do not start `bridge.server` or
+`npm run dev` for a match — that would be a second, disconnected stack.
 
 ```bash
 MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --preview
+# or without the overlay window:
+MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --no-preview
 ```
 
-### Onboarding and second-monitor telemetry
-
-Teaches the controls, calibrates, then becomes a match HUD for the audience.
-Add `--overlay` to also float the player-facing window over the game, from the
-same camera and the same process.
-
-```bash
-MPLCONFIGDIR=.cache/matplotlib python -m bridge.server --overlay
-cd onboarding && npm install && npm run dev      # second monitor
-```
-
-See `onboarding/README.md` for the flow, the wire contract, and match mode.
+`python -m bridge.server --mock` is UI-only with no camera. `python -m
+bridge.server` without `--mock` is an alias of `tracking.live --no-preview`.
 
 ## Permissions
 

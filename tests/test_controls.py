@@ -10,6 +10,7 @@ from tracking.controls import (
     ControlStateMachine,
     ControlThresholds,
     classify_direction,
+    hold_labels,
 )
 
 NEUTRAL = {"mouth_opening": 0.0, "left_wink": 0.0}
@@ -538,6 +539,14 @@ class StateContractTests(unittest.TestCase):
         published = ControlThresholds().as_dict()
         self.assertEqual(published["enter_radius"], ControlThresholds().enter_radius)
         self.assertIn("mouth_open", published)
+
+    def test_hold_labels_include_space_and_l(self) -> None:
+        state = machine().update(
+            nose=at(0.0, -0.12),
+            features={"mouth_opening": 0.2, "left_wink": -0.1},
+            tracking_valid=True,
+        )
+        self.assertEqual(set(hold_labels(state)), {"W", "Space", "L"})
 
 
 if __name__ == "__main__":
