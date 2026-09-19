@@ -40,6 +40,10 @@ class ThresholdValidationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             ControlThresholds(wink_on=0.02, wink_off=0.03)
 
+    def test_tongue_off_must_be_below_tongue_on(self) -> None:
+        with self.assertRaises(ValueError):
+            ControlThresholds(tongue_on=0.012, tongue_off=0.012)
+
 
 class DirectionClassifierTests(unittest.TestCase):
     def test_classifies_all_eight_zones(self) -> None:
@@ -512,7 +516,7 @@ class StateContractTests(unittest.TestCase):
     def test_state_contains_the_documented_contract_keys(self) -> None:
         state = machine().update(nose=CENTER, features=NEUTRAL, tracking_valid=True)
         self.assertLessEqual(
-            {"centered", "nose", "direction", "keys", "mouth", "wink", "tracking"},
+            {"centered", "nose", "direction", "keys", "mouth", "wink", "tongue", "tracking"},
             set(state),
         )
 
@@ -539,6 +543,8 @@ class StateContractTests(unittest.TestCase):
         published = ControlThresholds().as_dict()
         self.assertEqual(published["enter_radius"], ControlThresholds().enter_radius)
         self.assertIn("mouth_open", published)
+        self.assertIn("tongue_on", published)
+        self.assertIn("tongue_off", published)
 
     def test_hold_labels_include_space_and_l(self) -> None:
         state = machine().update(
@@ -547,6 +553,74 @@ class StateContractTests(unittest.TestCase):
             tracking_valid=True,
         )
         self.assertEqual(set(hold_labels(state)), {"W", "Space", "L"})
+
+
+class TongueResetTests(unittest.TestCase):
+    """Sticking the tongue out recentres pose; an open mouth must not."""
+
+    OPEN_MOUTH = {"mouth_opening": 0.2, "left_wink": 0.0, "tongue_out": -0.08}
+    TONGUE = {"mouth_opening": 0.18, "left_wink": 0.0, "tongue_out": 0.04}
+
+    def test_open_mouth_does_not_recalibrate(self) -> None:
+        state = machine()
+        state.update(nose=at(0.12, 0.0), features=self.OPEN_MOUTH, tracking_valid=True, now=0.0)
+        result = state.update(
+            nose=at(0.12, 0.0), features=self.OPEN_MOUTH, tracking_valid=True, now=0.1
+        )
+        self.assertFalse(result["tongue"]["fired"])
+        self.assertFalse(result["centered"])
+        self.assertTrue(result["mouth"]["active"])
+
+    def test_tongue_out_calibrates_the_current_nose_as_neutral(self) -> None:
+        state = machine()
+        drifted = at(0.12, 0.0)
+        state.update(nose=drifted, features=NEUTRAL, tracking_valid=True, now=0.0)
+        result = state.update(nose=drifted, features=self.TONGUE, tracking_valid=True, now=0.1)
+        self.assertTrue(result["tongue"]["fired"])
+        self.assertTrue(result["centered"], "tongue-out must recapture neutral like RESET")
+        self.assertEqual(result["keys"], [])
+
+    def test_held_tongue_does_not_recalibrate_again(self) -> None:
+        state = machine()
+        first = state.update(nose=CENTER, features=self.TONGUE, tracking_valid=True, now=0.0)
+        held = state.update(nose=at(0.12, 0.0), features=self.TONGUE, tracking_valid=True, now=0.2)
+        self.assertTrue(first["tongue"]["fired"])
+        self.assertFalse(held["tongue"]["fired"])
+        self.assertTrue(held["tongue"]["active"])
+        # Still latched, so a later nose should not keep re-centring.
+        self.assertEqual(held["direction"], "E")
+
+    def test_tongue_refires_only_after_dropping_below_reset(self) -> None:
+        state = machine()
+        state.update(nose=CENTER, features=self.TONGUE, tracking_valid=True, now=0.0)
+        state.update(nose=CENTER, features=self.OPEN_MOUTH, tracking_valid=True, now=0.2)
+        again = state.update(nose=at(0.12, 0.0), features=self.TONGUE, tracking_valid=True, now=0.4)
+        self.assertTrue(again["tongue"]["fired"])
+        self.assertTrue(again["centered"])
+
+    def test_tongue_out_does_not_hold_the_shoot_latch(self) -> None:
+        state = machine()
+        result = state.update(nose=CENTER, features=self.TONGUE, tracking_valid=True, now=0.0)
+        self.assertFalse(result["mouth"]["active"])
+        self.assertFalse(result["mouth"]["fired"])
+        self.assertNotIn("Space", hold_labels(result))
+
+    def test_tongue_out_does_not_raise_mouth_rest_thresholds(self) -> None:
+        state = machine()
+        before = state.mouth_thresholds
+        state.update(nose=CENTER, features=self.TONGUE, tracking_valid=True, now=0.0)
+        self.assertEqual(state.mouth_thresholds, before)
+
+    def test_missing_tongue_feature_does_not_reset(self) -> None:
+        state = machine()
+        result = state.update(
+            nose=at(0.12, 0.0),
+            features={"mouth_opening": 0.2, "left_wink": 0.0},
+            tracking_valid=True,
+            now=0.0,
+        )
+        self.assertFalse(result["tongue"]["fired"])
+        self.assertFalse(result["centered"])
 
 
 if __name__ == "__main__":

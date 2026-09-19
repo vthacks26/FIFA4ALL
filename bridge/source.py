@@ -189,6 +189,13 @@ class WebcamSource(ControlSource):
                 features=values,
                 tracking_valid=tracked.movement.tracking_valid,
             )
+            tongue = state.get("tongue")
+            if isinstance(tongue, dict) and tongue.get("fired"):
+                print(
+                    "Reset: tongue-out pose baseline cleared. "
+                    "Next valid face is neutral.",
+                    flush=True,
+                )
 
             jpeg: bytes | None = None
             if tracked.image is not None:

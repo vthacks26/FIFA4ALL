@@ -87,6 +87,10 @@ class InputSession:
 
         mouth = state.get("mouth")
         active = bool(mouth.get("active")) if isinstance(mouth, dict) else False
+        tongue = state.get("tongue")
+        if isinstance(tongue, dict) and bool(tongue.get("active")):
+            # Tongue-out is reset, not shoot. Don't hold Space while it is out.
+            active = False
         if active:
             if SHOOT_KEY not in self._held:
                 self._last_shot_started = now

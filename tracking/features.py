@@ -39,6 +39,9 @@ class FaceFeatureExtractor:
         "right_cheek",
         "upper_lip",
         "lower_lip",
+        "outer_lower_lip",
+        "inner_lower_left",
+        "inner_lower_right",
         "nose_tip",
         "left_eye",
         "right_eye",
@@ -93,6 +96,7 @@ class FaceFeatureExtractor:
             raise ValueError("face width too small for stable normalized measurements")
 
         mouth_opening = _distance(points["upper_lip"], points["lower_lip"]) / face_width
+        tongue_out = _tongue_protrusion(points, face_width)
 
         cheek_mid_x = (points["left_cheek"][0] + points["right_cheek"][0]) / 2.0
         head_turn = (points["nose_tip"][0] - cheek_mid_x) / face_width
@@ -112,6 +116,7 @@ class FaceFeatureExtractor:
             "left_wink": left_wink,
             "left_eye_opening": left_eye_opening,
             "right_eye_opening": right_eye_opening,
+            "tongue_out": tongue_out,
         }
 
     def _smooth(self, name: str, value: float) -> float:
@@ -121,6 +126,25 @@ class FaceFeatureExtractor:
         else:
             self._smoothed[name] = alpha * value + (1.0 - alpha) * self._smoothed[name]
         return self._smoothed[name]
+
+
+def _tongue_protrusion(points: Mapping[str, Point], face_width: float) -> float:
+    """Positive when the inner lower lip extends below the outer lower lip.
+
+    Image y grows downward. A normal open mouth keeps the inner lip (14) above
+    the outer lower lip / lip-chin line (17), so this stays <= 0. Sticking the
+    tongue out pushes the inner contour past that line and the value goes
+    positive. That is what separates reset from shoot.
+    """
+
+    inner_y = points["lower_lip"][1]
+    extra_left = points.get("inner_lower_left")
+    extra_right = points.get("inner_lower_right")
+    if extra_left is not None:
+        inner_y = max(inner_y, extra_left[1])
+    if extra_right is not None:
+        inner_y = max(inner_y, extra_right[1])
+    return (inner_y - points["outer_lower_lip"][1]) / face_width
 
 
 def _distance(a: Sequence[float], b: Sequence[float]) -> float:

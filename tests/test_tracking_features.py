@@ -10,6 +10,9 @@ BASE_POINTS = {
     "right_cheek": (0.75, 0.50),
     "upper_lip": (0.50, 0.58),
     "lower_lip": (0.50, 0.63),
+    "outer_lower_lip": (0.50, 0.70),
+    "inner_lower_left": (0.46, 0.63),
+    "inner_lower_right": (0.54, 0.63),
     "nose_tip": (0.50, 0.45),
     "left_eye": (0.38, 0.35),
     "right_eye": (0.62, 0.35),
@@ -30,6 +33,35 @@ class FaceFeatureExtractorTests(unittest.TestCase):
         self.assertAlmostEqual(frame.features["head_turn"].value, 0.0)
         self.assertAlmostEqual(frame.features["head_tilt"].value, 0.0)
         self.assertAlmostEqual(frame.features["left_wink"].value, 0.0)
+        self.assertLess(frame.features["tongue_out"].value, 0.0)
+
+    def test_open_mouth_without_tongue_stays_non_positive(self):
+        """Shoot (mouth open) must not look like a tongue-out reset."""
+
+        extractor = FaceFeatureExtractor(FeatureConfig(smoothing_alpha=1.0))
+        points = dict(BASE_POINTS)
+        # Drop the inner lip the way an open mouth does, keeping it above the
+        # outer lower lip so protrusion stays negative.
+        points["lower_lip"] = (0.50, 0.68)
+        points["inner_lower_left"] = (0.46, 0.68)
+        points["inner_lower_right"] = (0.54, 0.68)
+        points["outer_lower_lip"] = (0.50, 0.74)
+
+        frame = extractor.from_named_points(points)
+
+        self.assertGreater(frame.features["mouth_opening"].value, 0.15)
+        self.assertLessEqual(frame.features["tongue_out"].value, 0.0)
+
+    def test_tongue_out_is_positive_when_inner_lip_passes_outer_lip(self):
+        extractor = FaceFeatureExtractor(FeatureConfig(smoothing_alpha=1.0))
+        points = dict(BASE_POINTS)
+        points["lower_lip"] = (0.50, 0.76)
+        points["inner_lower_left"] = (0.46, 0.74)
+        points["inner_lower_right"] = (0.54, 0.74)
+
+        frame = extractor.from_named_points(points)
+
+        self.assertGreater(frame.features["tongue_out"].value, 0.012)
 
     def test_head_turn_sign_uses_camera_image_direction(self):
         extractor = FaceFeatureExtractor(FeatureConfig(smoothing_alpha=1.0))
