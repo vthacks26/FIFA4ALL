@@ -1,8 +1,8 @@
 # FIFA4ALL core dependencies (headless-friendly; used for cloud dev + CI)
 #
-# mediapipe brings in a matching opencv-contrib-python build, so we do not pin
-# opencv separately here. All of these import and run headlessly given the
-# system GL/EGL libraries installed by scripts/setup.sh.
-mediapipe==1.0.1
-numpy==2.5.3
-pytest==9.1.1
+# Pin 0.10.21: it exposes mp.solutions.face_mesh and is known to stay up on
+# this Mac. Newer 0.10.3x wheels drop solutions; 1.x FaceLandmarker SIGABRTs
+# (DrishtiMetalHelper). mediapipe brings a matching opencv build.
+mediapipe==0.10.21
+numpy>=1.24
+pytest>=8

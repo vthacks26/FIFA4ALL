@@ -1,11 +1,11 @@
 """Keyboard output abstraction (joe_plan.txt section 15).
 
 The control layer only emits intent; this layer converts intent into key
-press/release/tap events. Two backends are provided:
+press/release/tap events. Backends:
 
 * ``LoggingBackend``  -- records events, works everywhere (headless CI, cloud).
-* ``PynputBackend``   -- injects real OS keyboard events; used on the local Mac
-                         that drives the browser running Amazon Luna.
+* ``QuartzBackend``   -- macOS HID ``CGEventPost`` (what Luna actually accepts).
+* ``PynputBackend``   -- fallback OS injection when Quartz is unavailable.
 
 ``KeyboardController`` tracks which movement keys are currently held so that a
 key is released as soon as the head returns to neutral -- this prevents the
@@ -14,6 +14,7 @@ key is released as soon as the head returns to neutral -- this prevents the
 
 from __future__ import annotations
 
+import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Iterable, List
@@ -58,6 +59,63 @@ class LoggingBackend(KeyboardBackend):
 
     def tap(self, key: str) -> None:
         self._record("tap", key)
+
+
+# ANSI US virtual keycodes from Carbon HIToolbox Events.h
+_MAC_VIRTUAL_KEYCODES = {
+    "A": 0x00,
+    "S": 0x01,
+    "D": 0x02,
+    "W": 0x0D,
+    "L": 0x25,
+    "SPACE": 0x31,
+}
+_KCG_HID_EVENT_TAP = 0
+
+
+class QuartzBackend(KeyboardBackend):  # pragma: no cover - requires macOS
+    """macOS HID keyboard events via CoreGraphics (not DOM KeyboardEvents)."""
+
+    def __init__(self):
+        if sys.platform != "darwin":
+            raise RuntimeError("QuartzBackend only works on macOS.")
+        import ctypes
+        import ctypes.util
+
+        cg_path = ctypes.util.find_library("CoreGraphics") or (
+            "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics"
+        )
+        cf_path = ctypes.util.find_library("CoreFoundation") or (
+            "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation"
+        )
+        self._cg = ctypes.cdll.LoadLibrary(cg_path)
+        self._cf = ctypes.cdll.LoadLibrary(cf_path)
+        self._cg.CGEventCreateKeyboardEvent.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_uint16,
+            ctypes.c_bool,
+        ]
+        self._cg.CGEventCreateKeyboardEvent.restype = ctypes.c_void_p
+        self._cg.CGEventPost.argtypes = [ctypes.c_uint32, ctypes.c_void_p]
+        self._cg.CGEventPost.restype = None
+        self._cf.CFRelease.argtypes = [ctypes.c_void_p]
+        self._cf.CFRelease.restype = None
+
+    def press(self, key: str) -> None:
+        self._post(key, True)
+
+    def release(self, key: str) -> None:
+        self._post(key, False)
+
+    def _post(self, key: str, down: bool) -> None:
+        code = _MAC_VIRTUAL_KEYCODES.get(key.upper() if key != "SPACE" else "SPACE")
+        if code is None:
+            raise ValueError(f"Unsupported key {key!r}")
+        event = self._cg.CGEventCreateKeyboardEvent(None, code, down)
+        if not event:
+            raise RuntimeError("CGEventCreateKeyboardEvent failed.")
+        self._cg.CGEventPost(_KCG_HID_EVENT_TAP, event)
+        self._cf.CFRelease(event)
 
 
 class PynputBackend(KeyboardBackend):  # pragma: no cover - requires a display
@@ -116,6 +174,11 @@ def get_keyboard(prefer_real: bool = False) -> KeyboardController:
     """Build a controller, falling back to the logging backend when no display."""
 
     if prefer_real:
+        if sys.platform == "darwin":
+            try:
+                return KeyboardController(QuartzBackend())
+            except Exception:  # pragma: no cover - environment dependent
+                pass
         try:
             return KeyboardController(PynputBackend())
         except Exception:  # pragma: no cover - environment dependent
