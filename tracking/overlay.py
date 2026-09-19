@@ -14,10 +14,10 @@ WINDOW_TITLE = "FIFA4ALL look axis"
 
 # NSWindowStyleMaskNonactivatingPanel
 _NONACTIVATING_PANEL = 1 << 7
-# NSWindowCollectionBehaviorCanJoinAllSpaces | FullScreenAuxiliary
-_COLLECTION = (1 << 0) | (1 << 8)
-# NSFloatingWindowLevel
-_FLOATING_LEVEL = 3
+# NSWindowCollectionBehaviorCanJoinAllSpaces | FullScreenAuxiliary | Stationary
+_COLLECTION = (1 << 0) | (1 << 8) | (1 << 4)
+# NSStatusWindowLevel — sits above a fullscreen Chrome/Luna space
+_FLOATING_LEVEL = 25
 
 
 def decorate_overlay_window(title: str = WINDOW_TITLE) -> bool:

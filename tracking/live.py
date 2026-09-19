@@ -233,14 +233,11 @@ def main(argv: list[str] | None = None) -> int:
                     overlay_ready = decorate_overlay_window(WINDOW_TITLE)
                     if overlay_ready:
                         print("\nOverlay is floating / click-through.", flush=True)
-                if not chrome_restored:
-                    front_now = _frontmost_app()
-                    if front_now and "Chrome" not in front_now:
-                        restore_chrome_focus()
-                        chrome_restored = True
-                        print(f"Frontmost after overlay: {_frontmost_app()}", flush=True)
-                    elif front_now and "Chrome" in front_now:
-                        chrome_restored = True
+                if overlay_ready and not chrome_restored:
+                    restore_chrome_focus()
+                    decorate_overlay_window(WINDOW_TITLE)
+                    chrome_restored = True
+                    print(f"Frontmost after overlay: {_frontmost_app()}", flush=True)
     finally:
         session.release_all()
         tracker.stop()
