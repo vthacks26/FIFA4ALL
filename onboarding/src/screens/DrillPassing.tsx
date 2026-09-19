@@ -83,12 +83,11 @@ export function DrillPassing({ channel, onComplete }: DrillPassingProps) {
           <div className="drill__pitch-lines" />
 
           <div className="drill__passers">
-            <Player pose={passing ? "pass" : "idle"} kit="purple" size={168} />
+            <Player pose={passing ? "pass" : "idle"} kit="purple" size={210} />
             <Player
               pose={receiving ? "receive" : "idle"}
               kit="teal"
-              size={156}
-              skin="#8d5524"
+              size={195}
             />
           </div>
 

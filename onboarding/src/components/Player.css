@@ -1,136 +1,104 @@
+/* Sprite-based poses.
+   A cut-out cannot articulate its limbs, so every pose is whole-figure motion:
+   weight shift, lean, bounce, squash. Paired with a moving ball and a
+   reacting net, that reads as the action without faking articulation. */
+
 .player {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  transform-origin: 50% 100%;
+}
+
+.player__sprite {
   display: block;
-  overflow: visible;
-}
-
-.player__body {
-  transform-box: fill-box;
-  transform-origin: 50% 80%;
-  /* Turning toward the detected direction should feel snappy, not floaty. */
-  transform: rotateY(var(--yaw, 0deg)) rotate(var(--lean, 0deg));
+  height: 100%;
+  width: auto;
+  user-select: none;
+  /* Grounds the figure, replacing the cast shadow baked into the source art. */
+  filter: drop-shadow(0 10px 10px rgba(0, 0, 0, 0.45));
+  transform: rotateY(var(--yaw, 0deg));
   transition: transform 0.16s var(--snap);
+  transform-origin: 50% 100%;
 }
 
-.player__shadow {
-  fill: rgba(0, 0, 0, 0.32);
+.player.is-mirrored .player__sprite {
+  transform: scaleX(-1) rotateY(var(--yaw, 0deg));
 }
 
-.player__leg,
-.player__arm,
-.player__head {
-  transform-box: fill-box;
-  transform-origin: 50% 8%;
+/* ---- idle: a slow breath ---- */
+.player--idle .player__sprite {
+  animation: player-idle 3s ease-in-out infinite;
 }
 
-/* ---- idle: subtle ready-stance bob ---- */
-.player--idle .player__body {
-  animation: idle-bob 2.2s ease-in-out infinite;
+@keyframes player-idle {
+  50% { transform: translateY(-2px) scaleY(1.008); }
 }
 
-@keyframes idle-bob {
-  50% {
-    transform: rotateY(var(--yaw, 0deg)) rotate(var(--lean, 0deg)) translateY(-3px);
-  }
+/* ---- run: quick vertical bounce with a forward lean ---- */
+.player--run .player__sprite {
+  animation: player-run 0.34s ease-in-out infinite;
 }
 
-/* ---- run: run in place, root rotates to face direction ---- */
-.player--run .player__leg--front {
-  animation: run-front 0.42s ease-in-out infinite;
+@keyframes player-run {
+  0%, 100% { transform: translateY(0) rotate(-1.5deg); }
+  50% { transform: translateY(-9px) rotate(1.5deg) scaleY(1.02); }
 }
 
-.player--run .player__leg--back {
-  animation: run-back 0.42s ease-in-out infinite;
+.player.is-mirrored.player--run .player__sprite {
+  animation-name: player-run-mirrored;
 }
 
-.player--run .player__arm--front {
-  animation: run-back 0.42s ease-in-out infinite;
+@keyframes player-run-mirrored {
+  0%, 100% { transform: scaleX(-1) translateY(0) rotate(1.5deg); }
+  50% { transform: scaleX(-1) translateY(-9px) rotate(-1.5deg) scaleY(1.02); }
 }
 
-.player--run .player__arm--back {
-  animation: run-front 0.42s ease-in-out infinite;
+/* ---- shoot: wind up, then snap through the ball ---- */
+.player--shoot .player__sprite {
+  animation: player-shoot 0.5s var(--snap);
 }
 
-.player--run .player__body {
-  animation: run-bounce 0.21s ease-in-out infinite;
-}
-
-@keyframes run-front {
-  50% {
-    transform: rotate(32deg);
-  }
-}
-
-@keyframes run-back {
-  50% {
-    transform: rotate(-32deg);
-  }
-}
-
-@keyframes run-bounce {
-  50% {
-    transform: rotateY(var(--yaw, 0deg)) rotate(var(--lean, 0deg)) translateY(-4px);
-  }
-}
-
-/* ---- shoot: anticipation, then a fast strike ---- */
-.player--shoot .player__leg--front {
-  animation: shoot-leg 0.5s var(--snap);
-}
-
-.player--shoot .player__body {
-  animation: shoot-lean 0.5s var(--snap);
-}
-
-@keyframes shoot-leg {
+@keyframes player-shoot {
   0% { transform: rotate(0deg); }
-  30% { transform: rotate(-42deg); }   /* wind up */
-  55% { transform: rotate(64deg); }    /* strike */
+  28% { transform: rotate(-9deg) translateX(-5px) scaleY(0.98); }
+  52% { transform: rotate(11deg) translateX(8px) scaleY(1.02); }
   100% { transform: rotate(0deg); }
 }
 
-@keyframes shoot-lean {
-  30% { transform: rotateY(var(--yaw, 0deg)) rotate(-8deg); }
-  55% { transform: rotateY(var(--yaw, 0deg)) rotate(9deg); }
+/* ---- pass: a shorter, inside-foot version of the same move ---- */
+.player--pass .player__sprite {
+  animation: player-pass 0.4s var(--snap);
 }
 
-/* ---- pass: shorter, inside-foot motion ---- */
-.player--pass .player__leg--front {
-  animation: pass-leg 0.4s var(--snap);
-}
-
-@keyframes pass-leg {
+@keyframes player-pass {
   0% { transform: rotate(0deg); }
-  35% { transform: rotate(-22deg); }
-  60% { transform: rotate(34deg); }
+  35% { transform: rotate(-5deg) translateX(-3px); }
+  60% { transform: rotate(6deg) translateX(5px); }
   100% { transform: rotate(0deg); }
 }
 
-/* ---- receive: absorb the ball ---- */
-.player--receive .player__body {
-  animation: receive-absorb 0.42s var(--snap);
+/* ---- receive: absorb the ball, weight back ---- */
+.player--receive .player__sprite {
+  animation: player-receive 0.42s var(--snap);
 }
 
-@keyframes receive-absorb {
-  40% {
-    transform: rotateY(var(--yaw, 0deg)) translateX(6px) scaleY(0.95);
-  }
+@keyframes player-receive {
+  40% { transform: translateX(7px) scaleY(0.96) rotate(3deg); }
 }
 
-/* ---- celebrate: arms up, hop ---- */
-.player--celebrate .player__body {
-  animation: celebrate-hop 0.62s var(--pop) infinite;
+/* ---- celebrate: repeated hop ---- */
+.player--celebrate .player__sprite {
+  animation: player-celebrate 0.66s var(--pop) infinite;
 }
 
-.player--celebrate .player__arm--front {
-  transform: rotate(-152deg);
+@keyframes player-celebrate {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  45% { transform: translateY(-20px) rotate(2deg) scaleY(1.03); }
 }
 
-.player--celebrate .player__arm--back {
-  transform: rotate(152deg);
-}
-
-@keyframes celebrate-hop {
-  50% {
-    transform: translateY(-16px) rotate(-3deg);
+@media (prefers-reduced-motion: reduce) {
+  .player__sprite {
+    animation: none !important;
   }
 }

@@ -33,13 +33,13 @@ export function Welcome({ onStart }: WelcomeProps) {
       {/* Team entering the pitch from the tunnel. */}
       <div className="welcome__team">
         <div className="welcome__runner welcome__runner--a">
-          <Player pose="run" kit="teal" size={150} />
+          <Player pose="run" kit="teal" size={230} />
         </div>
         <div className="welcome__runner welcome__runner--b">
-          <Player pose="run" kit="lime" size={196} skin="#8d5524" />
+          <Player pose="run" kit="slate" size={300} />
         </div>
         <div className="welcome__runner welcome__runner--c">
-          <Player pose="idle" kit="purple" size={140} skin="#f0c9a6" />
+          <Player pose="idle" kit="crimson" size={215} />
         </div>
       </div>
     </section>

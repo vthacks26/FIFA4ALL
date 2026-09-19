@@ -83,7 +83,7 @@ export function DrillShooting({ channel, onComplete }: DrillShootingProps) {
           </div>
 
           <div className="drill__shooter">
-            <Player pose={kicking ? "shoot" : "idle"} kit="amber" size={190} />
+            <Player pose={kicking ? "shoot" : "idle"} kit="amber" size={240} />
           </div>
 
           {shotId > 0 && (

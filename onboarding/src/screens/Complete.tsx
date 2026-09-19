@@ -34,7 +34,7 @@ export function Complete({ channel, onNext }: CompleteProps) {
           </header>
 
           <div className="player-card__portrait">
-            <Player pose="celebrate" kit="lime" size={150} />
+            <Player pose="celebrate" kit="lime" size={158} />
           </div>
 
           <h2 className="player-card__name">Player 01</h2>

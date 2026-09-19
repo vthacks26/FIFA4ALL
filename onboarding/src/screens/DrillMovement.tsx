@@ -81,7 +81,7 @@ export function DrillMovement({ channel, onComplete }: DrillMovementProps) {
             pose={state.direction === null ? "idle" : "run"}
             kit="lime"
             facing={state.direction}
-            size={240}
+            size={300}
           />
           <div className={`drill__direction ${state.direction !== null ? "is-active" : ""}`}>
             {state.direction ?? "STOPPED"}

@@ -38,12 +38,13 @@
   inset: 0;
   display: grid;
   place-items: center;
+  /* Low contrast on purpose: the lime reticle sits on top and has to read. */
   background: repeating-linear-gradient(
     45deg,
-    var(--navy-800),
-    var(--navy-800) 12px,
-    var(--navy-700) 12px,
-    var(--navy-700) 24px
+    #070d18,
+    #070d18 12px,
+    #0b1424 12px,
+    #0b1424 24px
   );
   color: var(--muted);
   font-family: var(--display);
