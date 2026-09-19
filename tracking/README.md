@@ -30,8 +30,9 @@ Core feature calculation and synthetic fixtures use only the Python standard lib
 For the optional webcam diagnostic, from the repository root:
 
 ```bash
-python3 -m venv .venv
-. .venv/bin/activate
+brew install python@3.12
+/opt/homebrew/bin/python3.12 -m venv .venv-mediapipe
+. .venv-mediapipe/bin/activate
 python -m pip install -r tracking/requirements.txt
 ```
 
@@ -43,7 +44,7 @@ See `tracking/DEPENDENCIES.md` for the lightweight dependency split Person 3 can
 Run:
 
 ```bash
-python -m tracking.diagnostic
+MPLCONFIGDIR=.cache/matplotlib python -m tracking.diagnostic
 ```
 
 The diagnostic opens a webcam preview, overlays live feature values, shows tracking status, and reports measured processing rate. Press `q` to quit. The camera is released on normal exit.
@@ -51,7 +52,7 @@ The diagnostic opens a webcam preview, overlays live feature values, shows track
 For a live control-label preview that does not send keyboard input:
 
 ```bash
-python -m tracking.control_preview
+MPLCONFIGDIR=.cache/matplotlib python -m tracking.control_preview
 ```
 
 It displays suggested labels only:

@@ -17,12 +17,12 @@ Person 3 can run simulation tests and consume synthetic `MovementFrame` sequence
 
 ### Optional Webcam Tracking
 
-Install only on machines that need real webcam tracking:
+Install only on machines that need real webcam tracking. Use Python 3.12; Python 3.14 pulled a different MediaPipe package/API and did not work reliably in local testing.
 
 ```text
-opencv-python>=4.9
-mediapipe>=0.10
-numpy>=1.26
+mediapipe==0.10.14
+opencv-python>=4.11,<5
+numpy>=1.26,<2
 ```
 
 Why these are optional:
@@ -47,10 +47,21 @@ Person 3 should place these in an optional dependency group, for example `tracki
 ```toml
 [project.optional-dependencies]
 tracking-webcam = [
-  "opencv-python>=4.9",
-  "mediapipe>=0.10",
-  "numpy>=1.26",
+  "mediapipe==0.10.14; python_version == '3.12'",
+  "opencv-python>=4.11,<5",
+  "numpy>=1.26,<2",
 ]
 ```
 
 If the project does not use `pyproject.toml`, keep them in a separate requirements file such as `requirements-tracking-webcam.txt`.
+
+Verified local setup:
+
+```bash
+brew install python@3.12
+/opt/homebrew/bin/python3.12 -m venv .venv-mediapipe
+.venv-mediapipe/bin/python -m pip install -r tracking/requirements.txt
+MPLCONFIGDIR=.cache/matplotlib .venv-mediapipe/bin/python -m tracking.control_preview
+```
+
+Observed working labels in the MediaPipe preview: neutral `-`, `W`, `A`, `D`, `D+S`, `A+W`, `Space`, `L`, and combined labels such as `A+W+L` and `D+S+Space`.
