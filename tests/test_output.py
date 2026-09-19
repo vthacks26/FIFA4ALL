@@ -23,12 +23,14 @@ def state(
     mouth: bool = False,
     wink: bool = False,
     wink_fired: bool = False,
+    tongue: bool = False,
     tracking: bool = True,
 ) -> dict[str, object]:
     return {
         "keys": keys or [],
         "mouth": {"active": mouth, "fired": False},
         "wink": {"active": wink, "fired": wink_fired},
+        "tongue": {"active": tongue, "fired": False},
         "tracking": tracking,
     }
 
@@ -165,6 +167,12 @@ class ShootTests(unittest.TestCase):
         keyboard.reset()
         session.apply(state(mouth=False), now=0.4)
         self.assertEqual(keyboard.events, [("up", "Space")])
+
+    def test_tongue_out_does_not_hold_space(self) -> None:
+        session, keyboard = armed()
+        session.apply(state(mouth=True, tongue=True), now=0.0)
+        self.assertNotIn(SHOOT_KEY, session.held_keys)
+        self.assertEqual(keyboard.events, [])
 
     def test_shot_power_tracks_how_long_the_mouth_stayed_open(self) -> None:
         session, _ = armed()

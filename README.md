@@ -81,7 +81,7 @@ You do not need to recreate `.venv` or reinstall unless you deleted it.
 1. Grant Camera and Accessibility, then start `--preview` (orientation) or `--no-preview` (match, Luna already focused).
 2. Open **Google Chrome** → Amazon Luna → EA Sports FC (simplified keyboard layout).
 3. **Click the game** so Chrome / Luna is focused. OS keys go to the frontmost app.
-4. Sit straight. Recentre from the site (**Find your center**, **Reset center**) or tap **RESET** on the look-axis overlay. Site calibrate and overlay RESET both `POST /calibrate` on this same process — they apply to play. Keep the process running when you switch from the site to the match.
+4. Sit straight. Recentre by **sticking your tongue out**, from the site (**Find your center**, **Reset center**), or by tapping **RESET** on the look-axis overlay. Tongue-out, site calibrate, and overlay RESET all call the same `ControlStateMachine.calibrate` on this process — they apply to play. A held tongue does not repeat the reset; opening your mouth to shoot does not reset. Keep the process running when you switch from the site to the match.
 5. Look, open your mouth, or wink. Holds stay down until you return to center / close your mouth / stop winking.
 
 | Gesture | Key (held) | In-game (simplified FC) |
@@ -89,6 +89,7 @@ You do not need to recreate `.venv` or reinstall unless you deleted it.
 | Nose / head look axis (leave the center deadzone) | `W` `A` `S` `D` | Move |
 | Mouth open | `Space` | Shoot (hold while the mouth stays open) |
 | Wink (either eye; blinks rejected) | `L` | Pass (hold while the wink is detected) |
+| Tongue out | — | Recentre / recalibrate pose (same as overlay RESET and `POST /calibrate`) |
 
 The first valid nose point after start or Reset is the joystick center. Returning to that center releases WASD. Combinations are allowed (for example look + shoot).
 
@@ -108,4 +109,5 @@ More tracking notes: [`tracking/README.md`](tracking/README.md). Orientation scr
 
 - **Shooting** holds Space while the mouth is open, so a longer open is a more powerful shot. Calibration samples the resting mouth, because a mouth at rest does not read zero and a fixed threshold can latch Space open permanently.
 - **Passing** accepts either eye. A blink is rejected by requiring the other eye to stay open.
+- **Recentre** by sticking your tongue out (or overlay **RESET** / website **Find your center**). Detection is inner-lip protrusion past the outer lower lip, so a normal open mouth used for shoot does not reset. The trigger is edge-latched: a held tongue fires once until you put it away.
 - **Movement** releases every key when tracking is lost, so a lost face cannot leave the player running.

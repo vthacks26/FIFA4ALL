@@ -70,6 +70,12 @@ class ControlThresholds:
     mouth_min_gap: float = 0.030
     wink_on: float = 0.025
     wink_off: float = 0.015
+    # Tongue-out recentres pose (same ControlStateMachine.calibrate as overlay
+    # RESET and POST /calibrate). Measured as inner-lip protrusion past the
+    # outer lower lip, so a normal open mouth used for shoot stays negative
+    # and must not reset. Hysteresis so a held tongue fires once.
+    tongue_on: float = 0.012
+    tongue_off: float = 0.002
     # Eyelids do not close in sync, so mid-blink the left/right difference
     # spikes well past wink_on and reads as a wink. Measured on a real blink:
     # left 0.0043 against right 0.0551, a difference of 0.0508, double the
@@ -95,6 +101,8 @@ class ControlThresholds:
             raise ValueError("mouth_min_gap must be positive")
         if self.wink_off >= self.wink_on:
             raise ValueError("wink_off must be below wink_on")
+        if self.tongue_off >= self.tongue_on:
+            raise ValueError("tongue_off must be below tongue_on")
         if not 0.0 < self.eye_open_fraction < 1.0:
             raise ValueError("eye_open_fraction must be between 0 and 1")
         if self.eye_open_floor <= 0:
@@ -124,6 +132,8 @@ class ControlThresholds:
             "mouth_min_gap": self.mouth_min_gap,
             "wink_on": self.wink_on,
             "wink_off": self.wink_off,
+            "tongue_on": self.tongue_on,
+            "tongue_off": self.tongue_off,
             "eye_open_fraction": self.eye_open_fraction,
             "eye_open_floor": self.eye_open_floor,
             "dwell_seconds": self.dwell_seconds,
@@ -196,10 +206,12 @@ class ControlStateMachine:
     _wink_eye: str | None = None
     _mouth: _EdgeTrigger = field(init=False)
     _wink: _EdgeTrigger = field(init=False)
+    _tongue: _EdgeTrigger = field(init=False)
 
     def __post_init__(self) -> None:
         self._mouth = _EdgeTrigger(self.thresholds.mouth_open, self.thresholds.mouth_reset)
         self._wink = _EdgeTrigger(self.thresholds.wink_on, self.thresholds.wink_off)
+        self._tongue = _EdgeTrigger(self.thresholds.tongue_on, self.thresholds.tongue_off)
 
     def calibrate(
         self,
@@ -251,13 +263,16 @@ class ControlStateMachine:
             self._wink_eye = None
             self._mouth.update(None, moment)
             self._wink.update(None, moment)
+            self._tongue.update(None, moment)
             return self._state(
                 offset=(0.0, 0.0),
                 nose_point=None,
                 mouth_value=None,
                 wink_value=None,
+                tongue_value=None,
                 mouth_fired=False,
                 wink_fired=False,
+                tongue_fired=False,
                 tracking=False,
                 now=moment,
             )
@@ -275,7 +290,6 @@ class ControlStateMachine:
             offset = (0.0, 0.0)
             self._update_movement(offset)
 
-        mouth_value = features.get("mouth_opening")
         # `left_wink` is signed: positive when the left eye is more closed,
         # negative when the right eye is. Magnitude is what matters, so either
         # eye triggers a pass. Blinking both eyes moves them together and
@@ -288,16 +302,29 @@ class ControlStateMachine:
         self._wink_eye = (
             None if wink_value == 0.0 else _wink_eye(signed_wink, self.thresholds.wink_off)
         )
+        tongue_value = features.get("tongue_out")
+        _, tongue_fired = self._tongue.update(tongue_value, moment)
+        if tongue_fired:
+            # Same pose reset as overlay RESET / POST /calibrate, but do not
+            # sample mouth_rest: the tongue is not a resting mouth.
+            self.calibrate(nose)
+            offset = (0.0, 0.0)
+            self._update_movement(offset)
+        # Shoot is mouth-open. Tongue-out also opens the mouth, so ignore the
+        # mouth latch while the tongue is out or the reset would fire Space.
+        mouth_value = None if self._tongue.latched else features.get("mouth_opening")
         _, mouth_fired = self._mouth.update(mouth_value, moment)
         _, wink_fired = self._wink.update(wink_value, moment)
 
         return self._state(
             offset=offset,
             nose_point=nose,
-            mouth_value=mouth_value,
+            mouth_value=features.get("mouth_opening"),
             wink_value=wink_value,
+            tongue_value=tongue_value,
             mouth_fired=mouth_fired,
             wink_fired=wink_fired,
+            tongue_fired=tongue_fired,
             tracking=True,
             now=moment,
         )
@@ -386,8 +413,10 @@ class ControlStateMachine:
         nose_point: tuple[float, float] | None,
         mouth_value: float | None,
         wink_value: float | None,
+        tongue_value: float | None,
         mouth_fired: bool,
         wink_fired: bool,
+        tongue_fired: bool,
         tracking: bool,
         now: float,
     ) -> dict[str, object]:
@@ -417,6 +446,16 @@ class ControlStateMachine:
                 "confidence": _confidence(wink_value, self.thresholds.wink_on),
                 "held_seconds": round(self._wink.held_seconds(now), 3),
                 "eye": self._wink_eye,
+            },
+            "tongue": {
+                "active": self._tongue.latched,
+                "fired": tongue_fired,
+                "value": tongue_value,
+                "confidence": _confidence(
+                    None if tongue_value is None else max(tongue_value, 0.0),
+                    self.thresholds.tongue_on,
+                ),
+                "held_seconds": round(self._tongue.held_seconds(now), 3),
             },
             "tracking": tracking,
             "recentred": self.recentred,
