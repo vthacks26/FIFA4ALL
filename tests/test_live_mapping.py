@@ -102,7 +102,14 @@ class MacCameraTests(unittest.TestCase):
 
 class AnnotateFrameTests(unittest.TestCase):
     def test_annotate_blank_frame_keeps_shape(self):
-        import numpy as np
+        try:
+            import numpy as np
+        except ImportError:
+            self.skipTest("numpy is not installed")
+        try:
+            import cv2  # noqa: F401
+        except ImportError:
+            self.skipTest("opencv is not installed")
 
         from tracking.control_preview import NoseJoystickState
         from tracking.live import annotate_frame

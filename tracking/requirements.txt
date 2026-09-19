@@ -3,5 +3,8 @@
 # tests or CI unless webcam tracking is being exercised. The importable geometry
 # and synthetic fixtures use only the Python standard library.
 mediapipe==0.10.14
+# Face Mesh on 0.10.14 still calls SymbolDatabase.GetPrototype(); protobuf 5+
+# removed that API. Stay on the range MediaPipe declares.
+protobuf>=4.25.3,<5
 opencv-python>=4.11,<5
 numpy>=1.26,<2

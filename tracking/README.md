@@ -51,13 +51,19 @@ The diagnostic opens a webcam preview, overlays live feature values, shows track
 
 For Quartz OS key holds into the frontmost app (Google Chrome / Luna), MacBook camera only.
 
-Face + WASD look-axis overlay (non-activating, not click-through). Sit straight and tap the **Reset** button on the look-axis window to recapture the neutral nose axis:
+`--preview` waits until the UI is listening, then opens
+http://127.0.0.1:8765/ (Welcome / practice / live HUD) with macOS
+`/usr/bin/open` and a **separate** Face + WASD look-axis overlay
+(camera/vision only; non-activating). If the browser does not appear, the
+log prints that URL to click. Recentre from the website
+(**Find your center** / **Reset center**) or the overlay **Reset** — both
+drive the same live injector:
 
 ```bash
 MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --preview
 ```
 
-Headless inject (no overlay):
+Headless inject (same UI server, no overlay, no browser — keeps Luna focused):
 
 ```bash
 MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --no-preview

@@ -115,6 +115,29 @@ class BridgeServerTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(body["ok"])
 
+    def test_site_calibrate_is_the_same_session_as_injected_keys(self) -> None:
+        """POST /calibrate recentres the tracker that InputSession injects."""
+
+        self.hub.session.arm()
+        try:
+            self.reset_center()
+            post(
+                self.url("/mock"),
+                {"tracking": True, "nose": {"x": 0.12, "y": 0.0}, "mouth": 0.0, "wink": 0.0},
+            )
+            state = self.read_one_event()
+            self.assertEqual(state["keys"], ["D"])
+            self.assertIn("D", self.keyboard.held)
+
+            post(self.url("/calibrate"))
+            state = self.read_one_event()
+            self.assertEqual(state["keys"], [])
+            self.assertTrue(state["centered"])
+            self.assertEqual(self.keyboard.held, set())
+        finally:
+            self.hub.session.disarm()
+            self.keyboard.reset()
+
     def test_mock_endpoint_updates_the_streamed_state(self) -> None:
         self.reset_center()
         status, _ = post(
@@ -216,6 +239,278 @@ class BridgeServerTests(unittest.TestCase):
         if latest is None:
             self.fail("no event received from the stream")
         return latest
+
+
+    def test_built_orientation_ui_is_served_when_present(self) -> None:
+        from bridge.server import UI_DIST
+
+        if not (UI_DIST / "index.html").is_file():
+            self.skipTest("onboarding/dist is not built")
+        with urllib.request.urlopen(self.url("/"), timeout=5) as response:
+            html = response.read().decode("utf-8")
+        self.assertIn("<div id=\"root\">", html)
+        self.assertIn("FIFA4ALL", html)
+
+
+class OrientationLaunchTests(unittest.TestCase):
+    def test_intro_url_is_localhost_root(self) -> None:
+        from bridge.server import orientation_ui_url
+
+        self.assertEqual(orientation_ui_url(), "http://127.0.0.1:8765/")
+        self.assertEqual(orientation_ui_url(9000), "http://127.0.0.1:9000/")
+
+    def test_preview_opens_default_browser_to_intro(self) -> None:
+        from unittest.mock import patch
+
+        from bridge.server import maybe_open_orientation_ui
+
+        with patch("bridge.server.macos_open_bin", return_value=None):
+            with patch("bridge.server.webbrowser.open", return_value=True) as opened:
+                self.assertTrue(maybe_open_orientation_ui(preview=True, port=8765))
+        opened.assert_called_once_with("http://127.0.0.1:8765/", new=1, autoraise=True)
+
+    def test_macos_preview_uses_usr_bin_open(self) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from bridge.server import maybe_open_orientation_ui
+
+        completed = SimpleNamespace(returncode=0, stdout="", stderr="")
+        with patch("bridge.server.macos_open_bin", return_value="/usr/bin/open"):
+            with patch("bridge.server.subprocess.run", return_value=completed) as run:
+                with patch("bridge.server.webbrowser.open") as webbrowser_open:
+                    self.assertTrue(maybe_open_orientation_ui(preview=True, port=8765))
+        run.assert_called_once()
+        self.assertEqual(
+            run.call_args[0][0],
+            ["/usr/bin/open", "http://127.0.0.1:8765/"],
+        )
+        webbrowser_open.assert_not_called()
+
+    def test_macos_open_failure_prints_clickable_url(self) -> None:
+        import io
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from bridge.server import maybe_open_orientation_ui
+
+        completed = SimpleNamespace(
+            returncode=1, stdout="", stderr="LSOpenURLsWithRole() failed"
+        )
+        buf = io.StringIO()
+        with patch("bridge.server.macos_open_bin", return_value="/usr/bin/open"):
+            with patch("bridge.server.subprocess.run", return_value=completed):
+                with patch("bridge.server.webbrowser.open", return_value=False):
+                    with patch("sys.stdout", buf):
+                        self.assertFalse(
+                            maybe_open_orientation_ui(preview=True, port=8765)
+                        )
+        logged = buf.getvalue()
+        self.assertIn("Could not open the orientation UI automatically", logged)
+        self.assertIn("http://127.0.0.1:8765/", logged)
+        self.assertIn("Open http://127.0.0.1:8765/ in your browser", logged)
+
+    def test_no_preview_does_not_open_browser(self) -> None:
+        from unittest.mock import patch
+
+        from bridge.server import maybe_open_orientation_ui
+
+        with patch("bridge.server.macos_open_bin", return_value="/usr/bin/open"):
+            with patch("bridge.server.subprocess.run") as run:
+                with patch("bridge.server.webbrowser.open") as opened:
+                    self.assertFalse(maybe_open_orientation_ui(preview=False, port=8765))
+        opened.assert_not_called()
+        run.assert_not_called()
+
+    def test_run_product_preview_opens_browser_without_webcam(self) -> None:
+        from unittest.mock import patch
+
+        from bridge.server import ControlHub, run_product
+
+        with patch("bridge.server.macos_open_bin", return_value=None):
+            with patch("bridge.server.webbrowser.open", return_value=True) as opened:
+                with patch.object(ControlHub, "run", return_value=None):
+                    with patch("bridge.server._build_overlay", return_value=None):
+                        code = run_product(preview=True, mock=True, port=0, armed=False)
+        self.assertEqual(code, 0)
+        opened.assert_called_once()
+        url = opened.call_args[0][0]
+        self.assertTrue(url.startswith("http://127.0.0.1:"))
+        self.assertTrue(url.endswith("/"))
+
+    def test_run_product_preview_waits_then_uses_macos_open(self) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from bridge.server import ControlHub, run_product
+
+        order: list[str] = []
+        completed = SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        def wait(port: int, timeout: float = 5.0) -> bool:
+            order.append("wait")
+            return True
+
+        def run_open(*_args: object, **_kwargs: object) -> SimpleNamespace:
+            order.append("open")
+            return completed
+
+        with patch("bridge.server.wait_until_serving", side_effect=wait):
+            with patch("bridge.server.macos_open_bin", return_value="/usr/bin/open"):
+                with patch("bridge.server.subprocess.run", side_effect=run_open) as run:
+                    with patch("bridge.server.webbrowser.open") as webbrowser_open:
+                        with patch.object(ControlHub, "run", return_value=None):
+                            with patch("bridge.server._build_overlay", return_value=None):
+                                code = run_product(
+                                    preview=True, mock=True, port=0, armed=False
+                                )
+        self.assertEqual(code, 0)
+        self.assertEqual(order, ["wait", "open"])
+        webbrowser_open.assert_not_called()
+        argv = run.call_args[0][0]
+        self.assertEqual(argv[0], "/usr/bin/open")
+        self.assertTrue(argv[1].startswith("http://127.0.0.1:"))
+        self.assertTrue(argv[1].endswith("/"))
+
+    def test_run_product_no_preview_serves_ui_without_opening_browser(self) -> None:
+        from unittest.mock import patch
+
+        from bridge.server import ControlHub, run_product
+
+        with patch("bridge.server.macos_open_bin", return_value="/usr/bin/open"):
+            with patch("bridge.server.subprocess.run") as run:
+                with patch("bridge.server.webbrowser.open") as opened:
+                    with patch.object(ControlHub, "run", return_value=None):
+                        code = run_product(preview=False, mock=True, port=0, armed=False)
+        self.assertEqual(code, 0)
+        opened.assert_not_called()
+        run.assert_not_called()
+
+    def test_preview_opens_website_and_keeps_overlay_separate(self) -> None:
+        """Browser gets the site; overlay is a different native callback."""
+
+        from unittest.mock import patch
+
+        from bridge.server import ControlHub, run_product
+
+        with patch("bridge.server.macos_open_bin", return_value=None):
+            with patch("bridge.server.webbrowser.open", return_value=True) as opened:
+                with patch.object(ControlHub, "run", return_value=None) as hub_run:
+                    with patch(
+                        "bridge.server._build_overlay", return_value="overlay-cb"
+                    ) as build:
+                        code = run_product(preview=True, mock=True, port=0, armed=False)
+        self.assertEqual(code, 0)
+        opened.assert_called_once()
+        build.assert_called_once()
+        hub_run.assert_called_once_with(on_frame="overlay-cb")
+
+    def test_run_product_logs_url_when_ui_never_listens(self) -> None:
+        import io
+        from unittest.mock import patch
+
+        from bridge.server import ControlHub, run_product
+
+        buf = io.StringIO()
+        with patch("bridge.server.wait_until_serving", return_value=False):
+            with patch("bridge.server.macos_open_bin", return_value="/usr/bin/open"):
+                with patch("bridge.server.subprocess.run") as run:
+                    with patch("bridge.server.webbrowser.open") as opened:
+                        with patch.object(ControlHub, "run", return_value=None):
+                            with patch("bridge.server._build_overlay", return_value=None):
+                                with patch("sys.stdout", buf):
+                                    code = run_product(
+                                        preview=True, mock=True, port=0, armed=False
+                                    )
+        self.assertEqual(code, 0)
+        run.assert_not_called()
+        opened.assert_not_called()
+        logged = buf.getvalue()
+        self.assertIn("Could not confirm the orientation UI is listening", logged)
+        self.assertIn("http://127.0.0.1:", logged)
+        self.assertIn("Open ", logged)
+
+
+class OverlayStaysSeparateTests(unittest.TestCase):
+    def test_overlay_is_vision_hud_not_website_chrome(self) -> None:
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parent.parent
+        overlay = (root / "bridge" / "overlay_view.py").read_text(encoding="utf-8")
+        live = (root / "onboarding" / "src" / "screens" / "Live.tsx").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Reset center", live)
+        self.assertIn("calibrate", live)
+        for phrase in (
+            '"Find your center"',
+            '"Welcome"',
+            '"Redo training"',
+            '"WELCOME"',
+            '"Training Camp"',
+        ):
+            self.assertNotIn(phrase, overlay)
+        self.assertIn('"RESET"', overlay)
+        self.assertIn('"NO FACE"', overlay)
+        self.assertIn('"FIFA4ALL"', overlay)
+
+
+class WebcamCalibrateTests(unittest.TestCase):
+    def test_site_reset_recentres_the_same_machine_without_opening_a_camera(self) -> None:
+        from bridge.source import WebcamSource
+
+        source = WebcamSource()
+        source.machine.calibrate((0.5, 0.5))
+        off = (0.70, 0.50)
+        before = source.machine.update(nose=off, features={}, tracking_valid=True)
+        self.assertFalse(before["centered"])
+        self.assertEqual(before["keys"], ["D"])
+
+        # POST /calibrate and overlay RESET both call source.calibrate().
+        source.calibrate()
+        self.assertTrue(
+            source.apply_pending_calibrate(
+                off,
+                {"mouth_opening": 0.04, "left_eye_opening": 0.08, "right_eye_opening": 0.08},
+            )
+        )
+        after = source.machine.update(nose=off, features={}, tracking_valid=True)
+        self.assertTrue(after["centered"])
+        self.assertEqual(after["keys"], [])
+        self.assertEqual(source.machine.mouth_rest, 0.04)
+        self.assertEqual(source.machine.eye_rest, 0.08)
+
+    def test_a_second_site_reset_still_drives_the_same_injector(self) -> None:
+        """Website RESET stays live after the first calibrate; same machine."""
+
+        from bridge.source import WebcamSource
+
+        source = WebcamSource()
+        source.machine.calibrate((0.5, 0.5))
+        first = (0.70, 0.50)
+        source.calibrate()
+        source.apply_pending_calibrate(
+            first,
+            {"mouth_opening": 0.04, "left_eye_opening": 0.08, "right_eye_opening": 0.08},
+        )
+        self.assertEqual(
+            source.machine.update(nose=first, features={}, tracking_valid=True)["keys"],
+            [],
+        )
+
+        second = (0.30, 0.50)
+        moved = source.machine.update(nose=second, features={}, tracking_valid=True)
+        self.assertEqual(moved["keys"], ["A"])
+
+        source.calibrate()
+        source.apply_pending_calibrate(
+            second,
+            {"mouth_opening": 0.05, "left_eye_opening": 0.08, "right_eye_opening": 0.08},
+        )
+        after = source.machine.update(nose=second, features={}, tracking_valid=True)
+        self.assertTrue(after["centered"])
+        self.assertEqual(after["keys"], [])
+        self.assertEqual(source.machine.mouth_rest, 0.05)
 
 
 if __name__ == "__main__":

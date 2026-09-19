@@ -113,11 +113,15 @@ class WebcamSource(ControlSource):
         thresholds: ControlThresholds | None = None,
         *,
         camera_index: int = 0,
+        camera_name: str | None = None,
+        camera_unique_id: str | None = None,
         max_width: int = 640,
         jpeg_quality: int = 70,
     ) -> None:
         super().__init__(thresholds)
         self.camera_index = camera_index
+        self.camera_name = camera_name
+        self.camera_unique_id = camera_unique_id
         self.max_width = max_width
         self.jpeg_quality = jpeg_quality
         self._tracker: Any | None = None
@@ -128,14 +132,46 @@ class WebcamSource(ControlSource):
 
     def calibrate(self) -> None:
         # Defer to the capture loop so the center comes from a tracked frame.
+        # Overlay RESET and POST /calibrate both land here — same machine that
+        # InputSession reads for Quartz WASD / Space / L.
         self._recalibrate = True
+
+    def apply_pending_calibrate(
+        self,
+        nose: tuple[float, float] | None,
+        values: dict[str, float],
+    ) -> bool:
+        """Apply a deferred RESET onto the live ControlStateMachine.
+
+        Returns True when this frame became the new neutral. Safe to call with
+        no camera: the capture loop uses this so site calibrate and Luna inject
+        cannot drift onto separate trackers.
+        """
+
+        if not self._recalibrate or nose is None:
+            return False
+        left = values.get("left_eye_opening")
+        right = values.get("right_eye_opening")
+        eye_rest = max(left, right) if left is not None and right is not None else None
+        self.machine.calibrate(
+            nose,
+            mouth_rest=values.get("mouth_opening"),
+            eye_rest=eye_rest,
+        )
+        self._recalibrate = False
+        return True
 
     def frames(self) -> Iterator[tuple[dict[str, object], bytes | None]]:
         import cv2  # type: ignore[import-not-found]
 
         from tracking.mediapipe_tracker import WebcamFaceTracker
 
-        self._tracker = WebcamFaceTracker(camera_index=self.camera_index, max_width=self.max_width)
+        self._tracker = WebcamFaceTracker(
+            camera_index=self.camera_index,
+            camera_name=self.camera_name,
+            camera_unique_id=self.camera_unique_id,
+            max_width=self.max_width,
+        )
         self._tracker.start()
         encode_params = [int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality]
 
@@ -147,19 +183,7 @@ class WebcamSource(ControlSource):
                 if feature.available and feature.value is not None
             }
 
-            if self._recalibrate and nose is not None:
-                # Sample the resting mouth and open-eye width at the same moment
-                # as neutral, so the shoot latch releases reliably and a blink is
-                # never mistaken for a wink on this particular face.
-                left = values.get("left_eye_opening")
-                right = values.get("right_eye_opening")
-                eye_rest = max(left, right) if left is not None and right is not None else None
-                self.machine.calibrate(
-                    nose,
-                    mouth_rest=values.get("mouth_opening"),
-                    eye_rest=eye_rest,
-                )
-                self._recalibrate = False
+            self.apply_pending_calibrate(nose, values)
             state = self.machine.update(
                 nose=nose,
                 features=values,

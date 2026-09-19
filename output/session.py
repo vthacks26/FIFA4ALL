@@ -6,7 +6,7 @@ Semantics, decided from how EA Sports FC actually reads input:
   and release the moment the nose returns to centre.
 - Shooting is analogue. Mouth-open holds Space, so a longer open is a more
   powerful shot, matching how FC charges a strike.
-- Passing is discrete. One wink taps L once; an eye held closed never repeats.
+- Passing is a hold. Either-eye wink holds L until the eye opens again.
 
 Safety is the priority over expressiveness: losing tracking, disarming, or
 exiting always releases every held key, so a lost face can never leave the
@@ -25,10 +25,6 @@ MOVEMENT_KEYS = ("W", "A", "S", "D")
 SHOOT_KEY = "Space"
 PASS_KEY = "L"
 
-# How long a tapped key stays down. Long enough for a browser to register it,
-# short enough to feel instant at 30fps.
-TAP_SECONDS = 0.08
-
 
 @dataclass
 class InputSession:
@@ -41,7 +37,6 @@ class InputSession:
     keyboard: KeyboardBackend
     armed: bool = False
     _held: set[str] = field(default_factory=set)
-    _tap_release_at: dict[str, float] = field(default_factory=dict)
     _last_shot_started: float | None = None
     shot_seconds: float = 0.0
 
@@ -58,7 +53,6 @@ class InputSession:
         for key in sorted(self._held):
             self.keyboard.key_up(key)
         self._held.clear()
-        self._tap_release_at.clear()
         self._last_shot_started = None
         self.shot_seconds = 0.0
 
@@ -70,7 +64,6 @@ class InputSession:
         """Apply one control state frame."""
 
         moment = monotonic() if now is None else now
-        self._expire_taps(moment)
 
         if not self.armed or not state.get("tracking", False):
             self.release_all()
@@ -78,7 +71,7 @@ class InputSession:
 
         self._apply_movement(state)
         self._apply_shoot(state, moment)
-        self._apply_pass(state, moment)
+        self._apply_pass(state)
 
     def _apply_movement(self, state: Mapping[str, object]) -> None:
         raw = state.get("keys")
@@ -104,19 +97,15 @@ class InputSession:
             self._last_shot_started = None
             self.shot_seconds = 0.0
 
-    def _apply_pass(self, state: Mapping[str, object], now: float) -> None:
-        """A wink taps L. `fired` is already a rising edge upstream."""
+    def _apply_pass(self, state: Mapping[str, object]) -> None:
+        """Either-eye wink holds L until the eye opens again."""
 
         wink = state.get("wink")
-        fired = bool(wink.get("fired")) if isinstance(wink, dict) else False
-        if fired and PASS_KEY not in self._held:
+        active = bool(wink.get("active")) if isinstance(wink, dict) else False
+        if active:
             self._press(PASS_KEY)
-            self._tap_release_at[PASS_KEY] = now + TAP_SECONDS
-
-    def _expire_taps(self, now: float) -> None:
-        for key, due in list(self._tap_release_at.items()):
-            if now >= due:
-                self._release(key)
+        else:
+            self._release(PASS_KEY)
 
     def _press(self, key: str) -> None:
         if key in self._held:
@@ -125,7 +114,6 @@ class InputSession:
         self._held.add(key)
 
     def _release(self, key: str) -> None:
-        self._tap_release_at.pop(key, None)
         if key not in self._held:
             return
         self.keyboard.key_up(key)

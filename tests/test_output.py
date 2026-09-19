@@ -14,20 +14,21 @@ from output.keyboard import (
     build_keyboard,
     probe_key_output,
 )
-from output.session import MOVEMENT_KEYS, PASS_KEY, SHOOT_KEY, TAP_SECONDS, InputSession
+from output.session import MOVEMENT_KEYS, PASS_KEY, SHOOT_KEY, InputSession
 
 
 def state(
     keys: list[str] | None = None,
     *,
     mouth: bool = False,
+    wink: bool = False,
     wink_fired: bool = False,
     tracking: bool = True,
 ) -> dict[str, object]:
     return {
         "keys": keys or [],
         "mouth": {"active": mouth, "fired": False},
-        "wink": {"active": False, "fired": wink_fired},
+        "wink": {"active": wink, "fired": wink_fired},
         "tracking": tracking,
     }
 
@@ -91,7 +92,7 @@ class ArmingTests(unittest.TestCase):
     def test_disarmed_session_presses_nothing(self) -> None:
         keyboard = RecordingKeyboard()
         session = InputSession(keyboard)
-        session.apply(state(["W"], mouth=True, wink_fired=True), now=0.0)
+        session.apply(state(["W"], mouth=True, wink=True), now=0.0)
         self.assertEqual(keyboard.events, [])
 
     def test_disarming_releases_everything_held(self) -> None:
@@ -188,34 +189,27 @@ class ShootTests(unittest.TestCase):
 
 
 class PassTests(unittest.TestCase):
-    def test_wink_taps_the_pass_key(self) -> None:
+    def test_wink_holds_the_pass_key(self) -> None:
         session, keyboard = armed()
-        session.apply(state(wink_fired=True), now=0.0)
+        session.apply(state(wink=True), now=0.0)
         self.assertEqual(keyboard.events, [("down", "L")])
+        self.assertEqual(session.held_keys, frozenset({"L"}))
 
-    def test_tap_releases_after_the_tap_window(self) -> None:
+    def test_holding_the_wink_does_not_repeat_the_press(self) -> None:
         session, keyboard = armed()
-        session.apply(state(wink_fired=True), now=0.0)
+        session.apply(state(wink=True), now=0.0)
         keyboard.reset()
-        session.apply(state(), now=TAP_SECONDS + 0.01)
+        session.apply(state(wink=True), now=0.2)
+        self.assertEqual(keyboard.events, [])
+        self.assertEqual(session.held_keys, frozenset({"L"}))
+
+    def test_releasing_the_wink_releases_l(self) -> None:
+        session, keyboard = armed()
+        session.apply(state(wink=True), now=0.0)
+        keyboard.reset()
+        session.apply(state(wink=False), now=0.2)
         self.assertEqual(keyboard.events, [("up", "L")])
-
-    def test_tap_is_still_held_inside_the_window(self) -> None:
-        session, keyboard = armed()
-        session.apply(state(wink_fired=True), now=0.0)
-        keyboard.reset()
-        session.apply(state(), now=TAP_SECONDS / 2)
-        self.assertEqual(keyboard.events, [])
-
-    def test_eye_held_closed_does_not_repeat_the_pass(self) -> None:
-        session, keyboard = armed()
-        # `fired` is a rising edge upstream, so a held eye reports fired once.
-        session.apply(state(wink_fired=True), now=0.0)
-        session.apply(state(wink_fired=False), now=0.2)
-        keyboard.reset()
-        for step in range(5):
-            session.apply(state(wink_fired=False), now=0.3 + step * 0.1)
-        self.assertEqual(keyboard.events, [])
+        self.assertEqual(session.held_keys, frozenset())
 
 
 class SafetyTests(unittest.TestCase):

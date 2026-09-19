@@ -22,21 +22,34 @@ the on-screen zones truthful to the input logic.
 
 ## Run it
 
-Two processes. From the repository root:
+The live product already serves this UI. From the repository root:
 
 ```bash
-# 1. tracking bridge (real webcam)
-MPLCONFIGDIR=.cache/matplotlib .venv-mediapipe/bin/python -m bridge.server
-
-# 1b. or with no webcam at all
-.venv-mediapipe/bin/python -m bridge.server --mock
-
-# 2. orientation UI
-cd onboarding && npm install && npm run dev
+MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --preview
 ```
 
-Open http://localhost:5173 on the second monitor. If the bridge is not running
-the UI falls back to simulated input automatically.
+That waits until the UI is listening, then opens **http://127.0.0.1:8765/**
+(Welcome → practice → live HUD). On macOS that is `/usr/bin/open` on that
+URL (`webbrowser.open` often no-ops). If open fails, the log prints the URL
+to click. Drag that window to the second monitor. The native look-axis
+overlay stays a **separate** camera/vision window — website chrome is not
+drawn there. Same MacBook camera and Quartz holds. Do not start
+`npm run dev` and do not start a second camera.
+
+`--no-preview` still serves the same URL (inject + UI server) but does **not**
+open a browser, so Luna can keep keyboard focus. Open the URL yourself only
+when you are not mid-match.
+
+**Find your center** and the live **Reset center** control (and overlay RESET)
+recentre that same live tracker for the whole session. Pose calibration is not
+stored in the browser; it lives in the `tracking.live` process and is what
+Quartz uses for WASD / Space / L.
+
+UI-only mock, no webcam:
+
+```bash
+python -m bridge.server --mock
+```
 
 ## Bridge endpoints
 

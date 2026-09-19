@@ -457,3 +457,19 @@ def _confidence(value: float | None, threshold: float) -> float:
     if value is None or threshold <= 0:
         return 0.0
     return max(0.0, min(value / threshold, 1.0))
+
+
+def hold_labels(state: Mapping[str, object]) -> list[str]:
+    """WASD + Space hold + L hold from one control-state frame."""
+
+    labels: list[str] = []
+    keys = state.get("keys")
+    if isinstance(keys, list):
+        labels.extend(str(key) for key in keys if key in {"W", "A", "S", "D"})
+    mouth = state.get("mouth")
+    if isinstance(mouth, dict) and mouth.get("active"):
+        labels.append("Space")
+    wink = state.get("wink")
+    if isinstance(wink, dict) and wink.get("active"):
+        labels.append("L")
+    return labels

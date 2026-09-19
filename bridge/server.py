@@ -19,12 +19,19 @@ from __future__ import annotations
 
 import argparse
 import json
+import mimetypes
+import subprocess
 import sys
 import threading
 import traceback
+import urllib.error
+import urllib.request
+import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from time import monotonic
-from typing import Any, Callable
+from pathlib import Path
+from time import monotonic, sleep
+from typing import Any
+from urllib.parse import urlparse
 
 from bridge.source import ControlSource, MockSource, WebcamSource
 from output.focus import frontmost_application, game_has_focus
@@ -33,6 +40,134 @@ from output.session import InputSession
 from tracking.controls import DIRECTION_KEYS
 
 DEFAULT_PORT = 8765
+UI_DIST = Path(__file__).resolve().parent.parent / "onboarding" / "dist"
+MACOS_OPEN = "/usr/bin/open"
+
+
+def orientation_ui_url(port: int = DEFAULT_PORT) -> str:
+    """Intro / welcome page served by this process (no Vite / npm run dev)."""
+
+    return f"http://127.0.0.1:{port}/"
+
+
+def wait_until_serving(port: int, timeout: float = 5.0) -> bool:
+    """True once GET / answers, so the first browser load is not connection-refused."""
+
+    url = orientation_ui_url(port)
+    # Bypass HTTP(S)_PROXY so a machine proxy cannot hide localhost.
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    deadline = monotonic() + timeout
+    while monotonic() < deadline:
+        try:
+            with opener.open(url, timeout=0.25):
+                return True
+        except urllib.error.HTTPError:
+            return True  # server answered (missing dist is still "up")
+        except (OSError, urllib.error.URLError):
+            sleep(0.05)
+    return False
+
+
+def macos_open_bin() -> str | None:
+    """Return ``/usr/bin/open`` on macOS when that helper exists."""
+
+    if sys.platform != "darwin":
+        return None
+    return MACOS_OPEN if Path(MACOS_OPEN).is_file() else None
+
+
+def _open_with_macos_open(url: str, opener: str) -> tuple[bool, str | None]:
+    """Launch *url* with macOS ``open(1)``. ``webbrowser.open`` often no-ops here."""
+
+    try:
+        completed = subprocess.run(
+            [opener, url],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except Exception as exc:
+        return (False, f"{opener}: {exc}")
+    if completed.returncode == 0:
+        return (True, None)
+    detail = (completed.stderr or completed.stdout or "").strip()
+    reason = f"{opener} exited {completed.returncode}"
+    if detail:
+        reason = f"{reason}: {detail}"
+    return (False, reason)
+
+
+def _open_with_webbrowser(url: str) -> tuple[bool, str | None]:
+    try:
+        if webbrowser.open(url, new=1, autoraise=True):
+            return (True, None)
+        return (False, "webbrowser.open returned False")
+    except Exception as exc:
+        return (False, f"webbrowser.open: {exc}")
+
+
+def open_url_in_default_browser(url: str) -> tuple[bool, str | None]:
+    """Open *url* in the default browser.
+
+    On macOS prefer ``/usr/bin/open <url>``. Python's ``webbrowser.open`` often
+    returns True (or False) without actually launching a window.
+    """
+
+    opener = macos_open_bin()
+    if opener is not None:
+        opened, reason = _open_with_macos_open(url, opener)
+        if opened:
+            return (True, opener)
+        fallback_ok, fallback_reason = _open_with_webbrowser(url)
+        if fallback_ok:
+            return (True, "webbrowser")
+        parts = [part for part in (reason, fallback_reason) if part]
+        return (False, "; ".join(parts) or "unknown error")
+    opened, reason = _open_with_webbrowser(url)
+    return (opened, None if opened else (reason or "unknown error"))
+
+
+def open_orientation_ui(port: int = DEFAULT_PORT) -> bool:
+    """Open the Welcome / intro page after the UI server is listening.
+
+    Returns True if the platform accepted the open request. Never raises:
+    a failed open must not take down inject.
+    """
+
+    url = orientation_ui_url(port)
+    try:
+        opened, detail = open_url_in_default_browser(url)
+    except Exception as exc:  # never fail the live product over a browser helper
+        print(
+            f"Could not open the orientation UI automatically ({exc}). "
+            f"Open {url} in your browser.",
+            flush=True,
+        )
+        return False
+    if opened:
+        how = "with /usr/bin/open" if detail == MACOS_OPEN else "in your default browser"
+        print(f"Opened the orientation Welcome page {how}: {url}", flush=True)
+        return True
+    reason = detail or "unknown error"
+    print(
+        f"Could not open the orientation UI automatically ({reason}). "
+        f"Open {url} in your browser.",
+        flush=True,
+    )
+    return False
+
+
+def maybe_open_orientation_ui(*, preview: bool, port: int) -> bool:
+    """Open the intro page only for ``--preview``.
+
+    ``--no-preview`` still serves the same URL, but must not steal keyboard
+    focus from Luna by raising a browser.
+    """
+
+    if not preview:
+        return False
+    return open_orientation_ui(port)
 
 # Only these origins may read bridge responses. The bridge binds to loopback,
 # but loopback includes every tab the user has open, so a wildcard would let any
@@ -184,10 +319,11 @@ class BridgeHandler(BaseHTTPRequestHandler):
         elif self.path.startswith("/stream.mjpg"):
             self._send_mjpeg()
         else:
-            self._send_json({"error": "not found"}, status=404)
+            self._send_static()
 
     def do_POST(self) -> None:
         if self.path.startswith("/calibrate"):
+            # Same ControlSource the Quartz injector is already reading.
             self.hub.source.calibrate()
             self._send_json({"ok": True})
         elif self.path.startswith("/arm"):
@@ -271,6 +407,41 @@ class BridgeHandler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             return
 
+    def _send_static(self) -> None:
+        parsed = urlparse(self.path)
+        rel = parsed.path.lstrip("/")
+        root = UI_DIST.resolve()
+        if not rel or rel == "index.html":
+            target = root / "index.html"
+        else:
+            target = (root / rel).resolve()
+            try:
+                target.relative_to(root)
+            except ValueError:
+                self._send_json({"error": "not found"}, status=404)
+                return
+        if not target.is_file():
+            fallback = root / "index.html"
+            if fallback.is_file():
+                target = fallback
+            else:
+                self._send_json(
+                    {
+                        "error": "orientation UI is not built",
+                        "hint": "cd onboarding && npm install && npm run build",
+                    },
+                    status=404,
+                )
+                return
+        data = target.read_bytes()
+        ctype = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+        self.send_response(200)
+        self._cors()
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
 
 class QuietThreadingHTTPServer(ThreadingHTTPServer):
     """HTTP server that does not log a traceback when a client disconnects.
@@ -299,48 +470,135 @@ def build_server(
     return (server, hub)
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="FIFA4ALL orientation bridge server")
-    parser.add_argument("--mock", action="store_true", help="run without a webcam")
-    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
-    parser.add_argument("--camera", type=int, default=0)
-    parser.add_argument(
-        "--overlay",
-        action="store_true",
-        help="float a look-axis window above the game for the player",
-    )
-    args = parser.parse_args()
+def run_product(
+    *,
+    preview: bool,
+    port: int = DEFAULT_PORT,
+    mock: bool = False,
+    armed: bool = True,
+) -> int:
+    """One process: MacBook camera, Quartz holds, overlay, orientation UI."""
 
-    source: ControlSource = MockSource() if args.mock else WebcamSource(camera_index=args.camera)
-    server, hub = build_server(source, args.port)
-    hub.start()
-
-    mode = "mock" if args.mock else "webcam"
-    # Flushed explicitly: stdout is block-buffered when piped to a log file, and
-    # the operator must not miss the permission warning before a demo.
-    banner = [
-        f"FIFA4ALL bridge ({mode}) on http://127.0.0.1:{args.port}",
-        "  /config  /events  /stream.mjpg  POST /calibrate  POST /arm  POST /disarm",
-        "  keyboard output starts DISARMED; arm it from the second monitor",
-    ]
-    problem = QuartzKeyboard.permission_error()
-    if problem is not None:
-        banner += ["", "  keyboard output unavailable:", f"  {problem}", ""]
+    if mock:
+        source: ControlSource = MockSource()
+        session = InputSession(build_keyboard(), armed=False)
+        camera_line = "mock (no camera)"
     else:
-        banner.append("  keyboard output verified: synthetic keys reach macOS")
+        from tracking.mac_camera import (
+            list_avfoundation_devices,
+            select_builtin_mac_camera,
+            skipped_phone_devices,
+        )
+
+        devices = list_avfoundation_devices()
+        listing = ", ".join(f"{d.index}:{d.name!r}" for d in devices) or "(none)"
+        print(f"AVFoundation cameras: {listing}", flush=True)
+        for phone in skipped_phone_devices(devices):
+            print(
+                f"Skipping iPhone/Continuity index={phone.index} name={phone.name!r} "
+                "(will not probe)",
+                flush=True,
+            )
+        try:
+            chosen = select_builtin_mac_camera(devices)
+        except RuntimeError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 2
+        print(
+            f"Using built-in Mac camera index={chosen.index} name={chosen.name!r} "
+            "(refusing iPhone/Continuity; opening this named index only)",
+            flush=True,
+        )
+        source = WebcamSource(
+            camera_index=chosen.index,
+            camera_name=chosen.name,
+            camera_unique_id=chosen.unique_id,
+        )
+        session = InputSession(build_keyboard(), armed=armed)
+        camera_line = f"{chosen.index}:{chosen.name!r}"
+
+    server, hub = build_server(source, port, session)
+    bound_port = int(server.server_address[1])
+    intro = orientation_ui_url(bound_port)
+    banner = [
+        f"FIFA4ALL live on {intro}  camera={camera_line}",
+        "  same process: Quartz WASD / Space hold / wink-L hold",
+        "  overlay RESET and POST /calibrate recapture neutral",
+    ]
+    if preview:
+        banner.append(
+            "  --preview waits until the UI is listening, then opens the Welcome "
+            "page (macOS: /usr/bin/open). The look-axis window stays a separate "
+            "camera/vision overlay — not website chrome. No npm run dev."
+        )
+    else:
+        banner.append(
+            "  --no-preview still serves that URL but does not open a browser, "
+            "so Luna can keep keyboard focus"
+        )
+    if not mock:
+        banner.append(
+            "  inject starts ARMED; the orientation HUD can disarm without "
+            "opening another camera"
+        )
     print("\n".join(banner), flush=True)
 
-    # The HTTP server is threaded so the capture loop owns the main thread,
-    # which macOS requires for any window drawing.
     threading.Thread(target=server.serve_forever, name="bridge-http", daemon=True).start()
+    if preview:
+        ready = wait_until_serving(bound_port)
+        if not ready:
+            print(
+                f"Could not confirm the orientation UI is listening at {intro}. "
+                f"Open {intro} in your browser once it is up.",
+                flush=True,
+            )
+        else:
+            maybe_open_orientation_ui(preview=True, port=bound_port)
     try:
-        hub.run(on_frame=_build_overlay(hub) if args.overlay else None)
+        hub.run(on_frame=_build_overlay(hub) if preview else None)
     except KeyboardInterrupt:
         print("\nstopping")
     finally:
         hub.stop()
         server.shutdown()
+        server.server_close()
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="FIFA4ALL live product (alias of python -m tracking.live)"
+    )
+    parser.add_argument("--mock", action="store_true", help="UI-only mock; no webcam")
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    parser.add_argument(
+        "--preview",
+        action="store_true",
+        help=(
+            "after the UI is listening, open the Welcome page "
+            "(macOS: /usr/bin/open) and show the separate camera overlay"
+        ),
+    )
+    parser.add_argument(
+        "--no-preview",
+        action="store_true",
+        help="inject + serve the UI without overlay or opening a browser (keeps Luna focused)",
+    )
+    parser.add_argument(
+        "--overlay",
+        action="store_true",
+        help="same as --preview (kept for older scripts)",
+    )
+    args = parser.parse_args(argv)
+    preview = (bool(args.preview) or bool(args.overlay)) and not bool(args.no_preview)
+    if args.mock:
+        return run_product(preview=preview, port=args.port, mock=True, armed=False)
+    print(
+        "Starting the live product "
+        f"(python -m tracking.live {'--preview' if preview else '--no-preview'})",
+        flush=True,
+    )
+    return run_product(preview=preview, port=args.port, mock=False, armed=True)
 
 
 def _build_overlay(hub: ControlHub) -> "Callable[[dict[str, object]], None]":
@@ -348,11 +606,22 @@ def _build_overlay(hub: ControlHub) -> "Callable[[dict[str, object]], None]":
 
     import cv2  # type: ignore[import-not-found]
 
-    from bridge.overlay_view import draw_overlay
+    from bridge.overlay_view import draw_overlay, reset_button_rect
     from output.focus import restore_game_focus
     from tracking.overlay import WINDOW_TITLE, decorate_overlay_window, poll_reset_click
 
-    state_box: dict[str, bool] = {"decorated": False}
+    state_box: dict[str, bool] = {"decorated": False, "mouse": False}
+
+    def _on_mouse(event: int, x: int, y: int, *_args: object) -> None:
+        if event != cv2.EVENT_LBUTTONDOWN:
+            return
+        frame = getattr(hub.source, "last_frame", None)
+        if frame is None:
+            return
+        height, width = frame.shape[:2]
+        x1, y1, x2, y2 = reset_button_rect(width, height)
+        if x1 <= x <= x2 and y1 <= y <= y2:
+            hub.source.calibrate()
 
     def render(state: dict[str, object]) -> None:
         source = hub.source
@@ -360,6 +629,9 @@ def _build_overlay(hub: ControlHub) -> "Callable[[dict[str, object]], None]":
         if frame is None:
             return
         cv2.imshow(WINDOW_TITLE, draw_overlay(cv2, frame, state, source.thresholds))
+        if not state_box["mouse"]:
+            cv2.setMouseCallback(WINDOW_TITLE, _on_mouse)
+            state_box["mouse"] = True
         cv2.waitKey(1)
         if not state_box["decorated"]:
             # Must happen after the first imshow, once the window exists.

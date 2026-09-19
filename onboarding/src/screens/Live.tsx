@@ -25,7 +25,7 @@ interface LiveProps {
 }
 
 export function Live({ channel, onRestart }: LiveProps) {
-  const { state, config, status, setArmed, useMock } = channel;
+  const { state, config, status, setArmed, useMock, calibrate } = channel;
   const confidence = state.tracking ? 96 : 0;
   // Shot power is how long the mouth has stayed open, capped for display.
   const heldSeconds = state.mouth.held_seconds ?? 0;
@@ -142,6 +142,14 @@ export function Live({ channel, onRestart }: LiveProps) {
           />
         </div>
         <p className="live__motto">Play without limits.</p>
+        <button
+          className="btn btn--ghost live__restart"
+          onClick={() => calibrate()}
+          type="button"
+          disabled={useMock}
+        >
+          Reset center
+        </button>
         <button className="btn btn--ghost live__restart" onClick={onRestart} type="button">
           Redo training
         </button>

@@ -21,6 +21,7 @@ Install only on machines that need real webcam tracking. Use Python 3.12; Python
 
 ```text
 mediapipe==0.10.14
+protobuf>=4.25.3,<5
 opencv-python>=4.11,<5
 numpy>=1.26,<2
 ```
@@ -29,6 +30,8 @@ Why these are optional:
 
 - `opencv-python` opens the Mac webcam and displays the diagnostic preview.
 - `mediapipe` provides the pretrained face landmark tracker.
+- `protobuf>=4.25.3,<5` is the range MediaPipe 0.10.14 declares. Newer protobuf
+  removed `SymbolDatabase.GetPrototype()`, which Face Mesh still calls.
 - `numpy` is pulled in by the diagnostic preview path.
 
 ## Performance Notes
@@ -48,6 +51,7 @@ Person 3 should place these in an optional dependency group, for example `tracki
 [project.optional-dependencies]
 tracking-webcam = [
   "mediapipe==0.10.14; python_version == '3.12'",
+  "protobuf>=4.25.3,<5",
   "opencv-python>=4.11,<5",
   "numpy>=1.26,<2",
 ]
