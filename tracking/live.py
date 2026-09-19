@@ -29,7 +29,12 @@ from tracking.mac_camera import (
     skipped_phone_devices,
 )
 from tracking.mediapipe_tracker import WebcamFaceTracker
-from tracking.overlay import WINDOW_TITLE, decorate_overlay_window, restore_chrome_focus
+from tracking.overlay import (
+    WINDOW_TITLE,
+    decorate_overlay_window,
+    poll_reset_click,
+    restore_chrome_focus,
+)
 from tracking.quartz_keys import HeldKeySession, QuartzKeyInjector, labels_to_keys
 
 RESET_BUTTON_LABEL = "RESET"
@@ -74,14 +79,14 @@ def _accessibility_trusted() -> bool | None:
 
 
 def reset_button_rect(width: int, height: int) -> tuple[int, int, int, int]:
-    """Bottom-right Reset hit box in frame pixels (x1, y1, x2, y2)."""
+    """Top-right Reset hit box in frame pixels (x1, y1, x2, y2)."""
 
-    box_w = min(168, max(96, width // 3))
-    box_h = min(52, max(36, height // 8))
+    box_w = min(200, max(120, width // 3))
+    box_h = min(56, max(40, height // 7))
     margin = 10
     x2 = max(margin + box_w, width - margin)
-    y2 = max(margin + box_h, height - margin)
-    return (x2 - box_w, y2 - box_h, x2, y2)
+    y1 = margin
+    return (x2 - box_w, y1, x2, y1 + box_h)
 
 
 def hit_reset_button(x: int, y: int, width: int, height: int) -> bool:
@@ -278,7 +283,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         for tracked in tracker.tracked_frames():
-            if mouse_state["pending"]:
+            if mouse_state["pending"] or poll_reset_click():
                 mouse_state["pending"] = False
                 recalibrate_pose(
                     joystick,
@@ -339,10 +344,10 @@ def main(argv: list[str] | None = None) -> int:
                 cv2.imshow(WINDOW_TITLE, vis)
                 cv2.setMouseCallback(WINDOW_TITLE, _on_mouse)
                 cv2.waitKey(1)
-                if not overlay_ready:
-                    overlay_ready = decorate_overlay_window(WINDOW_TITLE)
-                    if overlay_ready:
-                        print("\nOverlay is floating; Reset is tappable.", flush=True)
+                decorated = decorate_overlay_window(WINDOW_TITLE)
+                if decorated and not overlay_ready:
+                    overlay_ready = True
+                    print("\nOverlay is floating; Reset button accepts clicks.", flush=True)
                 if overlay_ready and not chrome_restored:
                     restore_chrome_focus()
                     decorate_overlay_window(WINDOW_TITLE)

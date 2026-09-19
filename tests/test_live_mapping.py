@@ -2,6 +2,7 @@ import unittest
 
 from tracking.control_preview import HoldState, NoseJoystickState, PreviewThresholds, suggested_keys
 from tracking.live import hit_reset_button, recalibrate_pose, reset_button_rect
+from tracking.overlay import parse_ns_frame
 from tracking.mac_camera import (
     CameraDevice,
     allowed_opencv_indexes,
@@ -121,12 +122,15 @@ class AnnotateFrameTests(unittest.TestCase):
 
 
 class ResetButtonTests(unittest.TestCase):
-    def test_reset_hit_box_is_bottom_right(self):
+    def test_reset_hit_box_is_top_right(self):
         x1, y1, x2, y2 = reset_button_rect(640, 360)
         self.assertGreater(x1, 400)
-        self.assertGreater(y1, 280)
+        self.assertLess(y1, 40)
         self.assertTrue(hit_reset_button(x1 + 8, y1 + 8, 640, 360))
-        self.assertFalse(hit_reset_button(10, 10, 640, 360))
+        self.assertFalse(hit_reset_button(10, 200, 640, 360))
+
+    def test_parse_ns_frame(self):
+        self.assertEqual(parse_ns_frame("{{12, 34}, {640, 480}}"), (12.0, 34.0, 640.0, 480.0))
 
     def test_recalibrate_clears_joystick_center(self):
         joystick = NoseJoystickState()
