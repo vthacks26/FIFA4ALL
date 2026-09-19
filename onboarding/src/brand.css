@@ -1,0 +1,181 @@
+/* FIFA4ALL design tokens - see BRAND_KIT.md
+   Dark pitch-night base with lime as the single active/success colour,
+   matching the approved wireframe reference. Most screens use 2-3 colours. */
+
+@import url("https://fonts.googleapis.com/css2?family=Archivo:ital,wght@0,600;0,800;1,800&family=Inter:wght@400;500;600&display=swap");
+
+:root {
+  --navy-900: #060b16;
+  --navy-800: #0b1424;
+  --navy-700: #142036;
+  --navy-600: #1d2c47;
+  --line: #24354f;
+
+  --off-white: #f2f6fb;
+  --muted: #8ea3c0;
+
+  --lime: #9bff3c;
+  --lime-dim: #5c9e1f;
+  --teal: #2dd4bf;
+  --amber: #ffb020;
+  --purple: #a78bfa;
+  --red: #ff5964;
+
+  --display: "Archivo", system-ui, sans-serif;
+  --body: "Inter", system-ui, sans-serif;
+
+  /* Snappy, physical motion - never floaty. */
+  --snap: cubic-bezier(0.2, 0.9, 0.25, 1);
+  --pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--navy-900);
+  color: var(--off-white);
+  font-family: var(--body);
+  overflow: hidden;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--display);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+/* Pitch-line backdrop motif used across drill screens. */
+.pitch-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 30%, rgba(155, 255, 60, 0.09), transparent 55%),
+    linear-gradient(180deg, var(--navy-800), var(--navy-900));
+  overflow: hidden;
+}
+
+.pitch-bg::after {
+  content: "";
+  position: absolute;
+  inset: -10%;
+  background-image:
+    linear-gradient(rgba(155, 255, 60, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(155, 255, 60, 0.05) 1px, transparent 1px);
+  background-size: 64px 64px;
+  transform: perspective(600px) rotateX(58deg);
+  transform-origin: 50% 100%;
+}
+
+.screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(24px, 3.5vw, 56px);
+  animation: screen-in 0.45s var(--snap) both;
+}
+
+@keyframes screen-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+}
+
+.eyebrow {
+  font-family: var(--display);
+  font-size: 0.78rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--lime);
+}
+
+.lede {
+  color: var(--muted);
+  font-size: clamp(0.95rem, 1.1vw, 1.15rem);
+  line-height: 1.5;
+  max-width: 46ch;
+  margin: 12px 0 0;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: var(--display);
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 16px 30px;
+  text-transform: uppercase;
+  transition: transform 0.18s var(--pop), box-shadow 0.18s var(--snap);
+}
+
+.btn--primary {
+  background: var(--lime);
+  color: var(--navy-900);
+  box-shadow: 0 8px 0 var(--lime-dim);
+}
+
+.btn--primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 0 var(--lime-dim);
+}
+
+.btn--primary:active {
+  transform: translateY(4px);
+  box-shadow: 0 4px 0 var(--lime-dim);
+}
+
+.btn--ghost {
+  background: transparent;
+  border: 2px solid var(--line);
+  color: var(--muted);
+}
+
+.btn--ghost:hover {
+  border-color: var(--lime);
+  color: var(--lime);
+}
+
+.panel {
+  background: rgba(11, 20, 36, 0.82);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  backdrop-filter: blur(6px);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

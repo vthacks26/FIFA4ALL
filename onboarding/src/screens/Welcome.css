@@ -1,0 +1,79 @@
+.welcome {
+  justify-content: center;
+}
+
+/* Stylised tunnel mouth framing the entrance. */
+.welcome__tunnel {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 42% 62% at 72% 52%, rgba(155, 255, 60, 0.16), transparent 70%),
+    linear-gradient(90deg, rgba(6, 11, 22, 0.96) 0%, rgba(6, 11, 22, 0.55) 34%, transparent 58%);
+  animation: tunnel-push 1.4s var(--snap) both;
+}
+
+@keyframes tunnel-push {
+  from {
+    transform: scale(1.14);
+    opacity: 0;
+  }
+}
+
+.welcome__content {
+  position: relative;
+  z-index: 2;
+  max-width: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  animation: content-rise 0.7s 0.25s var(--snap) both;
+}
+
+@keyframes content-rise {
+  from {
+    opacity: 0;
+    transform: translateY(26px);
+  }
+}
+
+.welcome__tagline {
+  margin: 0;
+  font-family: var(--display);
+  font-style: italic;
+  font-size: clamp(1.1rem, 1.6vw, 1.5rem);
+  color: var(--off-white);
+}
+
+.welcome__prompt {
+  margin: 10px 0 0;
+  font-family: var(--display);
+  font-size: clamp(1.3rem, 2.1vw, 2rem);
+  text-transform: uppercase;
+  color: var(--lime);
+}
+
+.welcome__team {
+  position: absolute;
+  right: 3%;
+  bottom: 4%;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  z-index: 1;
+}
+
+.welcome__runner {
+  animation: enter-pitch 1s var(--snap) both;
+}
+
+.welcome__runner--a { animation-delay: 0.35s; }
+.welcome__runner--b { animation-delay: 0.15s; }
+.welcome__runner--c { animation-delay: 0.55s; }
+
+@keyframes enter-pitch {
+  from {
+    opacity: 0;
+    transform: translateX(130px) scale(0.9);
+  }
+}

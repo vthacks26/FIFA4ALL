@@ -1,0 +1,136 @@
+.player {
+  display: block;
+  overflow: visible;
+}
+
+.player__body {
+  transform-box: fill-box;
+  transform-origin: 50% 80%;
+  /* Turning toward the detected direction should feel snappy, not floaty. */
+  transform: rotateY(var(--yaw, 0deg)) rotate(var(--lean, 0deg));
+  transition: transform 0.16s var(--snap);
+}
+
+.player__shadow {
+  fill: rgba(0, 0, 0, 0.32);
+}
+
+.player__leg,
+.player__arm,
+.player__head {
+  transform-box: fill-box;
+  transform-origin: 50% 8%;
+}
+
+/* ---- idle: subtle ready-stance bob ---- */
+.player--idle .player__body {
+  animation: idle-bob 2.2s ease-in-out infinite;
+}
+
+@keyframes idle-bob {
+  50% {
+    transform: rotateY(var(--yaw, 0deg)) rotate(var(--lean, 0deg)) translateY(-3px);
+  }
+}
+
+/* ---- run: run in place, root rotates to face direction ---- */
+.player--run .player__leg--front {
+  animation: run-front 0.42s ease-in-out infinite;
+}
+
+.player--run .player__leg--back {
+  animation: run-back 0.42s ease-in-out infinite;
+}
+
+.player--run .player__arm--front {
+  animation: run-back 0.42s ease-in-out infinite;
+}
+
+.player--run .player__arm--back {
+  animation: run-front 0.42s ease-in-out infinite;
+}
+
+.player--run .player__body {
+  animation: run-bounce 0.21s ease-in-out infinite;
+}
+
+@keyframes run-front {
+  50% {
+    transform: rotate(32deg);
+  }
+}
+
+@keyframes run-back {
+  50% {
+    transform: rotate(-32deg);
+  }
+}
+
+@keyframes run-bounce {
+  50% {
+    transform: rotateY(var(--yaw, 0deg)) rotate(var(--lean, 0deg)) translateY(-4px);
+  }
+}
+
+/* ---- shoot: anticipation, then a fast strike ---- */
+.player--shoot .player__leg--front {
+  animation: shoot-leg 0.5s var(--snap);
+}
+
+.player--shoot .player__body {
+  animation: shoot-lean 0.5s var(--snap);
+}
+
+@keyframes shoot-leg {
+  0% { transform: rotate(0deg); }
+  30% { transform: rotate(-42deg); }   /* wind up */
+  55% { transform: rotate(64deg); }    /* strike */
+  100% { transform: rotate(0deg); }
+}
+
+@keyframes shoot-lean {
+  30% { transform: rotateY(var(--yaw, 0deg)) rotate(-8deg); }
+  55% { transform: rotateY(var(--yaw, 0deg)) rotate(9deg); }
+}
+
+/* ---- pass: shorter, inside-foot motion ---- */
+.player--pass .player__leg--front {
+  animation: pass-leg 0.4s var(--snap);
+}
+
+@keyframes pass-leg {
+  0% { transform: rotate(0deg); }
+  35% { transform: rotate(-22deg); }
+  60% { transform: rotate(34deg); }
+  100% { transform: rotate(0deg); }
+}
+
+/* ---- receive: absorb the ball ---- */
+.player--receive .player__body {
+  animation: receive-absorb 0.42s var(--snap);
+}
+
+@keyframes receive-absorb {
+  40% {
+    transform: rotateY(var(--yaw, 0deg)) translateX(6px) scaleY(0.95);
+  }
+}
+
+/* ---- celebrate: arms up, hop ---- */
+.player--celebrate .player__body {
+  animation: celebrate-hop 0.62s var(--pop) infinite;
+}
+
+.player--celebrate .player__arm--front {
+  transform: rotate(-152deg);
+}
+
+.player--celebrate .player__arm--back {
+  transform: rotate(152deg);
+}
+
+@keyframes celebrate-hop {
+  50% {
+    transform: translateY(-16px) rotate(-3deg);
+  }
+}

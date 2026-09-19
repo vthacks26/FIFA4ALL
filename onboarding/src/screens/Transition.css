@@ -1,0 +1,63 @@
+.transition {
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* Motion-blur speed lines behind the incoming ball. */
+.transition__speed {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0 22px,
+    rgba(242, 246, 251, 0.07) 22px 24px
+  );
+  animation: speed-rush 0.35s linear infinite;
+}
+
+@keyframes speed-rush {
+  to {
+    transform: translateX(-24px);
+  }
+}
+
+.transition__ball {
+  position: relative;
+  z-index: 3;
+  animation: ball-to-camera 2.1s cubic-bezier(0.6, 0, 0.9, 0.45) forwards;
+}
+
+@keyframes ball-to-camera {
+  0% { transform: scale(0.16) translateY(40px); }
+  55% { transform: scale(1) translateY(0); }
+  100% { transform: scale(13); }
+}
+
+.transition__copy {
+  position: absolute;
+  z-index: 2;
+  bottom: 16%;
+  margin: 0;
+  font-family: var(--display);
+  font-style: italic;
+  font-size: clamp(1.6rem, 3vw, 2.6rem);
+  text-transform: uppercase;
+  color: var(--off-white);
+  animation: copy-fade 2.1s var(--snap) both;
+}
+
+@keyframes copy-fade {
+  0%, 30% { opacity: 0; transform: translateX(30px); }
+  55% { opacity: 1; transform: translateX(0); }
+  85%, 100% { opacity: 0; }
+}
+
+.transition__skip {
+  position: absolute;
+  z-index: 4;
+  right: 28px;
+  top: 24px;
+  padding: 10px 20px;
+  font-size: 0.8rem;
+}

@@ -1,0 +1,49 @@
+.meter {
+  --tone: var(--lime);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.meter--teal { --tone: var(--teal); }
+.meter--purple { --tone: var(--purple); }
+.meter--amber { --tone: var(--amber); }
+
+.meter__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.meter__label {
+  font-family: var(--display);
+  font-size: 0.68rem;
+  letter-spacing: 0.16em;
+  color: var(--muted);
+}
+
+.meter__value {
+  font-family: var(--display);
+  font-size: 0.78rem;
+  color: var(--off-white);
+  font-variant-numeric: tabular-nums;
+}
+
+.meter__track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--navy-700);
+  overflow: hidden;
+}
+
+.meter__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--tone);
+  transition: width 0.09s linear;
+}
+
+.meter.is-active .meter__fill {
+  box-shadow: 0 0 14px var(--tone);
+}

@@ -1,0 +1,128 @@
+.reticle {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.reticle svg {
+  overflow: visible;
+}
+
+.reticle__radar,
+.reticle__cross,
+.reticle__divider {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.reticle__cross,
+.reticle__divider {
+  stroke-dasharray: 4 6;
+}
+
+.reticle__inner {
+  fill: none;
+  stroke: rgba(155, 255, 60, 0.25);
+  stroke-width: 1;
+  stroke-dasharray: 3 5;
+}
+
+.reticle__neutral {
+  fill: rgba(155, 255, 60, 0.07);
+  stroke: var(--lime);
+  stroke-width: 2.5;
+  transition: fill 0.15s var(--snap), stroke 0.15s var(--snap);
+}
+
+.reticle__neutral.is-active {
+  fill: transparent;
+  stroke: var(--muted);
+}
+
+.reticle__lock {
+  fill: none;
+  stroke: var(--lime);
+  stroke-width: 5;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 8px rgba(155, 255, 60, 0.6));
+}
+
+.reticle__wedge {
+  fill: rgba(155, 255, 60, 0.16);
+  stroke: var(--lime);
+  stroke-width: 1.5;
+  animation: wedge-in 0.18s var(--snap);
+}
+
+@keyframes wedge-in {
+  from {
+    opacity: 0;
+    fill: rgba(155, 255, 60, 0.5);
+  }
+}
+
+.reticle__key {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--navy-700);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-family: var(--display);
+  font-size: 0.95rem;
+  font-weight: 800;
+  transition: background 0.15s var(--snap), color 0.15s var(--snap), box-shadow 0.15s;
+}
+
+.reticle__key.is-active {
+  background: var(--lime);
+  border-color: var(--lime);
+  color: var(--navy-900);
+  box-shadow: 0 0 18px rgba(155, 255, 60, 0.55);
+}
+
+.reticle__ball {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transition: transform 0.06s linear;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.55));
+}
+
+/* Tracking lock: the ring contracts and flashes green once acquired. */
+.reticle.is-locked .reticle__neutral {
+  animation: lock-pop 0.5s var(--pop);
+  fill: rgba(155, 255, 60, 0.22);
+}
+
+@keyframes lock-pop {
+  50% {
+    transform: scale(0.88);
+  }
+}
+
+.reticle__lost {
+  position: absolute;
+  /* Clears the S key label that sits at the bottom of the ring. */
+  bottom: -32px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--red);
+  color: #fff;
+  font-family: var(--display);
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  animation: pulse-lost 1.1s ease-in-out infinite;
+}
+
+@keyframes pulse-lost {
+  50% {
+    opacity: 0.45;
+  }
+}

@@ -1,0 +1,34 @@
+.app {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Signature ball wipe: the ball rockets across frame to reveal the next scene. */
+.wipe {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  background: var(--navy-900);
+  transform: translateX(-101%);
+  overflow: hidden;
+}
+
+.wipe.is-active {
+  animation: wipe-sweep 0.56s var(--snap);
+}
+
+@keyframes wipe-sweep {
+  0% { transform: translateX(-101%); }
+  48% { transform: translateX(0); }
+  100% { transform: translateX(101%); }
+}
+
+.wipe__ball {
+  position: absolute;
+  top: 50%;
+  right: -60px;
+  transform: translateY(-50%);
+}
