@@ -63,5 +63,25 @@ class MacCameraTests(unittest.TestCase):
         self.assertFalse(name_is_phone("MacBook Pro Camera", False))
 
 
+class AnnotateFrameTests(unittest.TestCase):
+    def test_annotate_blank_frame_keeps_shape(self):
+        import numpy as np
+
+        from tracking.control_preview import NoseJoystickState
+        from tracking.live import annotate_frame
+
+        blank = np.zeros((120, 160, 3), dtype=np.uint8)
+        vis = annotate_frame(
+            blank,
+            landmarks=None,
+            joystick=NoseJoystickState(),
+            thresholds=PreviewThresholds(),
+            labels=["W", "A"],
+            tracking_valid=False,
+            space_hold_seconds=0.0,
+        )
+        self.assertEqual(vis.shape, blank.shape)
+
+
 if __name__ == "__main__":
     unittest.main()

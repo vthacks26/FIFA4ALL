@@ -14,13 +14,18 @@ import sys
 from time import monotonic
 
 from tracking.control_preview import (
+    HoldState,
     NoseJoystickState,
     PreviewThresholds,
+    _draw_joystick,
+    _draw_landmarks,
+    _draw_lines,
     _nose_point,
     suggested_keys,
 )
 from tracking.mac_camera import list_avfoundation_devices, select_builtin_mac_camera
 from tracking.mediapipe_tracker import WebcamFaceTracker
+from tracking.overlay import WINDOW_TITLE, decorate_overlay_window, restore_chrome_focus
 from tracking.quartz_keys import HeldKeySession, QuartzKeyInjector, labels_to_keys
 
 
@@ -72,6 +77,37 @@ def _apply(session: HeldKeySession, keys: frozenset[str]) -> None:
         print(f"KEY up {key}", flush=True)
 
 
+def annotate_frame(
+    frame: object,
+    *,
+    landmarks: object | None,
+    joystick: NoseJoystickState,
+    thresholds: PreviewThresholds,
+    labels: list[str],
+    tracking_valid: bool,
+    space_hold_seconds: float,
+) -> object:
+    """Draw face landmarks, WASD nose-joystick zones, and live key labels."""
+
+    import cv2  # type: ignore[import-not-found]
+
+    vis = frame.copy()
+    if landmarks is not None:
+        _draw_landmarks(cv2, vis, landmarks)
+        _draw_joystick(cv2, vis, joystick, landmarks, thresholds)
+    charge = min(space_hold_seconds / thresholds.full_space_charge_seconds, 1.0)
+    _draw_lines(
+        cv2,
+        vis,
+        [
+            f"tracking: {'valid' if tracking_valid else 'lost'}",
+            f"keys: {', '.join(labels) if labels else '-'}",
+            f"space hold: {space_hold_seconds:.2f}s ({charge * 100:.0f}%)",
+        ],
+    )
+    return vis
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="MacBook camera → Quartz WASD/Space/L holds for Luna"
@@ -79,12 +115,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--no-preview",
         action="store_true",
-        help="do not open an OpenCV window (default behavior)",
+        help="do not open the face / look-axis overlay",
     )
     parser.add_argument(
         "--preview",
         action="store_true",
-        help="show the tracking overlay window (steals focus)",
+        help="show face + WASD nose-joystick overlay (non-activating on macOS)",
     )
     args = parser.parse_args(argv)
     preview = bool(args.preview) and not bool(args.no_preview)
@@ -136,16 +172,29 @@ def main(argv: list[str] | None = None) -> int:
 
     thresholds = PreviewThresholds()
     joystick = NoseJoystickState()
+    space_hold = HoldState()
     print(
         "Live Quartz inject. Nose joystick WASD, mouth holds Space, wink holds L. "
         "Ctrl+C quits. Face lost → all keys released.",
         flush=True,
     )
+    if preview:
+        print(
+            f"Face overlay '{WINDOW_TITLE}' is click-through and should stay "
+            "above Luna without becoming the key window.",
+            flush=True,
+        )
     import cv2  # type: ignore[import-not-found]
 
+    overlay_ready = False
+    chrome_restored = False
     try:
         for tracked in tracker.tracked_frames():
-            if tracked.movement.tracking_valid and tracked.landmarks is not None:
+            labels: list[str] = []
+            tracking_valid = bool(
+                tracked.movement.tracking_valid and tracked.landmarks is not None
+            )
+            if tracking_valid:
                 nose = _nose_point(tracked.landmarks)
                 offset = joystick.update(nose)
                 values = {
@@ -155,22 +204,43 @@ def main(argv: list[str] | None = None) -> int:
                 }
                 labels = suggested_keys(values, thresholds, offset)
                 _apply(session, labels_to_keys(labels))
-                print(
-                    f"\rtracking=True keys={'+'.join(labels) if labels else '-'}     ",
-                    end="",
-                    flush=True,
-                )
+                hold_s = space_hold.update("Space" in labels, monotonic())
             else:
                 joystick.update(None)
                 _apply(session, frozenset())
-                print("\rtracking=False keys=-     ", end="", flush=True)
+                hold_s = space_hold.update(False, monotonic())
+
+            print(
+                f"\rtracking={tracking_valid} keys={'+'.join(labels) if labels else '-'}     ",
+                end="",
+                flush=True,
+            )
 
             if preview and tracked.image is not None:
-                cv2.imshow("tracking live - press q to quit", tracked.image)
-                key = cv2.waitKey(1) & 0xFF
-                if key == ord("q"):
-                    print()
-                    break
+                vis = annotate_frame(
+                    tracked.image,
+                    landmarks=tracked.landmarks,
+                    joystick=joystick,
+                    thresholds=thresholds,
+                    labels=labels,
+                    tracking_valid=tracking_valid,
+                    space_hold_seconds=hold_s,
+                )
+                cv2.namedWindow(WINDOW_TITLE, cv2.WINDOW_NORMAL)
+                cv2.imshow(WINDOW_TITLE, vis)
+                cv2.waitKey(1)
+                if not overlay_ready:
+                    overlay_ready = decorate_overlay_window(WINDOW_TITLE)
+                    if overlay_ready:
+                        print("\nOverlay is floating / click-through.", flush=True)
+                if not chrome_restored:
+                    front_now = _frontmost_app()
+                    if front_now and "Chrome" not in front_now:
+                        restore_chrome_focus()
+                        chrome_restored = True
+                        print(f"Frontmost after overlay: {_frontmost_app()}", flush=True)
+                    elif front_now and "Chrome" in front_now:
+                        chrome_restored = True
     finally:
         session.release_all()
         tracker.stop()
