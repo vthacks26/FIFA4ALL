@@ -124,6 +124,59 @@ Engine landed in `tracking/rebind.py`. Wiring it into the drills is Wave 2.
   existing dev panel. Only Phase 3 needs a real face.
 - Camera access is currently blocked by macOS TCC for the VS Code host.
 
+## Wave 2 - Orientation drives the bindings
+
+Architecture decision, following ONBOARDING_PLAN.md: the rebind engine runs in
+Python, not the browser. Python already owns the camera, the thresholds and the
+control state; running the decision there keeps one source of truth and means
+the UI cannot disagree with what the input layer actually did.
+
+### Phase 6 - Rest baseline capture
+
+`RebindEngine` needs a per-player `Baseline` before it can score anything, and
+nothing currently samples one.
+
+- [ ] Sample every feature over a rest window during the existing calibrate step
+- [ ] Reject a baseline taken while tracking was lost or the face was moving
+- [ ] Persist it in the profile alongside the other calibration values
+- [ ] Tests: rest window, movement during rest rejected, tracking loss rejected
+
+### Phase 7 - Drill session over the bridge
+
+- [ ] `POST /drill` opens a drill for one action; `DELETE /drill` abandons it
+- [ ] The SSE frame carries the live `RebindState`: outcome, candidate, reps,
+      required, switched_from
+- [ ] Confirming writes the binding into the active `BindingMap` and the profile
+- [ ] Rest test after confirmation: a channel that fires while the player sits
+      still is rejected, and the drill restarts
+- [ ] Conflict check against channels already bound
+- [ ] Tests: each outcome over the wire, confirmation persists, rest-test
+      rejection, conflict rejection
+
+### Phase 8 - Generic drill screen
+
+- [ ] Parameterize the drill over `{action, channel}` instead of `state.mouth`
+- [ ] Action picker listing actions and the channels `selectable_channels()`
+      offers
+- [ ] Show a silent switch in plain language when `switched_from` is set
+- [ ] Show `gated` so a visible gesture that cannot fire explains itself
+- [ ] Tests: drill completes against any channel in mock mode
+
+### Phase 9 - Profiles in the loop
+
+- [ ] Load the profile at startup; fall back to defaults only when none exists
+- [ ] Rerunning orientation rewrites it
+- [ ] Move `bridge/overlay_view.py` and the frontend onto the channel view
+- [ ] Delete `LEGACY_CHANNEL_KEYS` once nothing reads it
+
+### Verification
+
+- [ ] `python3 -m unittest` green
+- [ ] `tsc --noEmit` clean, `eslint --max-warnings 0`, no `any`
+- [ ] Mock-mode walkthrough with a forced rebind
+- [ ] Two profiles with different bindings both play
+- [ ] Live webcam pass to tune the unmeasured constants
+
 ## Known follow-ups
 
 - `ControlThresholds` and `GestureChannel.default_on/off` both hold the mouth
@@ -135,4 +188,12 @@ Engine landed in `tracking/rebind.py`. Wiring it into the drills is Wave 2.
   works via the aliases; move it to the channel view in Phase 2.
 - The specificity constants (`SPECIFICITY_MARGIN`, `ASKED_QUIET_Z`,
   `MIN_PULSE_Z`) are reasoned, not measured. Tune them against real faces the
-  way `eye_open_fraction` was.
+  way `eye_open_fraction` was. The same applies to every Phase 3 channel
+  threshold: they are anatomy-derived, not sampled from a tester.
+- `eyebrow_raise` and `brow_raise` are two measurements of the same anatomy,
+  arrived at independently on main and on this branch. They use different
+  landmarks, different normalizers and different threshold semantics (delta
+  from rest against absolute). Collapse to one.
+- `brow_raise` is measured but not offered, because raising the eyebrows is
+  already the pose-reset gesture. Deciding whether reset moves to another
+  gesture, freeing the brows for binding, is a product call, not a code one.
