@@ -1,0 +1,7 @@
+# Extra dependencies needed only on the local Mac that actually plays the game.
+#
+# These drive real OS-level keyboard events into the browser running Amazon
+# Luna / EA Sports FC. They are intentionally NOT in requirements.txt because a
+# headless Linux CI/cloud box has no display to inject events into.
+-r requirements.txt
+pynput==1.7.7
