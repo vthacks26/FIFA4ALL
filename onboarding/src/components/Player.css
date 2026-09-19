@@ -1,162 +1,185 @@
-/* Sprite-based poses.
-   Each pose is its own rendered frame, so the limbs genuinely change between
-   them. The whole-figure motion below (weight shift, lean, bounce, squash) now
-   rides on top of real articulation rather than standing in for it. */
+/* 16-bit pixel-art footballer.
+   Poses rotate limb groups rather than swapping frames, so the stride is real
+   articulation: the legs counter-phase, the arms counter-phase against the
+   legs, and the body bounces at twice the stride rate so the figure rises once
+   per footfall.
+
+   Cycles (idle, run) cut hard between two positions, which is what makes them
+   read as retro rather than merely smooth. One-shot actions (shoot, pass,
+   receive) interpolate, because a strike needs to accelerate to look powerful
+   and a two-frame kick just looks broken. */
 
 .player {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  transform-origin: 50% 100%;
-}
-
-.player__sprite {
   display: block;
-  height: 100%;
-  width: auto;
-  user-select: none;
-  /* Grounds the figure, replacing the cast shadow baked into the source art. */
-  filter: drop-shadow(0 10px 10px rgba(0, 0, 0, 0.45));
-  transform: rotateY(var(--yaw, 0deg));
+  overflow: visible;
+  /* Keeps the pixel grid hard-edged at every size instead of antialiasing the
+     block boundaries into mush. */
+  shape-rendering: crispEdges;
+}
+
+.player__shadow {
+  fill: rgba(0, 0, 0, 0.32);
+}
+
+.player__body {
+  transform-box: fill-box;
+  transform-origin: 50% 80%;
+  /* Turning toward the detected direction should feel snappy, not floaty. */
+  transform: rotateY(var(--yaw, 0deg)) rotate(var(--lean, 0deg));
   transition: transform 0.16s var(--snap);
-  transform-origin: 50% 100%;
 }
 
-.player.is-mirrored .player__sprite {
-  transform: scaleX(-1) rotateY(var(--yaw, 0deg));
+/* Limbs pivot at their top edge: the shoulder for arms, the hip for legs. */
+.player__limb {
+  transform-box: fill-box;
+  transform-origin: 50% 0;
 }
 
-/* ---- idle: a slow breath ---- */
-.player--idle .player__sprite {
-  animation: player-idle 3s ease-in-out infinite;
+/* ---- idle: a two-frame ready-stance bob ---- */
+.player--idle .player__body {
+  animation: idle-bob 1.8s steps(1, end) infinite;
 }
 
-@keyframes player-idle {
-  50% {
-    transform: translateY(-2px) scaleY(1.008);
-  }
-}
-
-/* ---- run: a two-frame stride cycle, with bounce layered over it ----
-   The two stride frames are stacked and swapped on a hard cut. `steps(1, end)`
-   rather than a fade, because cross-fading two different leg positions reads as
-   a ghost rather than a step. The bounce below runs at twice the stride rate,
-   so the figure rises once per footfall. */
-/* Grid stacking rather than absolute positioning: both frames occupy the same
-   cell, so they stay centred and bottom-aligned without needing a transform of
-   their own, which the bounce animation already owns. */
-.player--run {
-  display: grid;
-  /* The row must be sized explicitly. A content-sized row makes the sprites'
-     `height: 100%` resolve to auto, so they render at their natural 900px and
-     burst out of the layout. */
-  grid-template-rows: minmax(0, 100%);
-  align-items: end;
-  justify-items: center;
-}
-
-.player--run .player__sprite--stride-a,
-.player--run .player__sprite--stride-b {
-  grid-area: 1 / 1;
-  animation:
-    player-run 0.34s ease-in-out infinite,
-    player-stride 0.34s steps(1, end) infinite;
-}
-
-.player--run .player__sprite--stride-b {
-  animation-name: player-run, player-stride-offset;
-}
-
-@keyframes player-stride {
+@keyframes idle-bob {
   0%,
   49.99% {
-    opacity: 1;
+    transform: rotateY(var(--yaw, 0deg)) rotate(var(--lean, 0deg)) translateY(0);
   }
   50%,
   100% {
-    opacity: 0;
+    transform: rotateY(var(--yaw, 0deg)) rotate(var(--lean, 0deg)) translateY(-1px);
   }
 }
 
-@keyframes player-stride-offset {
+/* ---- run: a two-position stride, cut hard on the beat ----
+   The limbs share one pair of keyframes; which phase a limb starts on is what
+   makes the stride counter-phase. Front leg and back arm swing together, as
+   they do when a person actually runs. */
+.player--run .player__leg--front {
+  animation: stride-a 0.36s steps(1, end) infinite;
+}
+
+.player--run .player__leg--back {
+  animation: stride-b 0.36s steps(1, end) infinite;
+}
+
+/* Arms travel far less than legs. Seen head-on, most of a runner's arm swing is
+   toward and away from the viewer rather than across it, so matching the leg
+   angle here reads as flapping instead of running. */
+.player--run .player__arm--back {
+  animation: arm-swing-a 0.36s steps(1, end) infinite;
+}
+
+.player--run .player__arm--front {
+  animation: arm-swing-b 0.36s steps(1, end) infinite;
+}
+
+.player--run .player__body {
+  animation: run-bounce 0.18s steps(1, end) infinite;
+}
+
+@keyframes stride-a {
   0%,
   49.99% {
-    opacity: 0;
+    transform: rotate(26deg);
   }
   50%,
   100% {
-    opacity: 1;
+    transform: rotate(-26deg);
   }
 }
 
-@keyframes player-run {
+@keyframes stride-b {
   0%,
+  49.99% {
+    transform: rotate(-26deg);
+  }
+  50%,
   100% {
-    transform: translateY(0) rotate(-1.5deg);
-  }
-  50% {
-    transform: translateY(-9px) rotate(1.5deg) scaleY(1.02);
+    transform: rotate(26deg);
   }
 }
 
-.player.is-mirrored.player--run .player__sprite {
-  animation-name: player-run-mirrored;
-}
-
-/* Mirroring only swaps the bounce keyframes; naming one animation here would
-   drop the stride swap that shares the shorthand, so both are restated. */
-.player.is-mirrored.player--run .player__sprite--stride-a {
-  animation-name: player-run-mirrored, player-stride;
-}
-
-.player.is-mirrored.player--run .player__sprite--stride-b {
-  animation-name: player-run-mirrored, player-stride-offset;
-}
-
-@keyframes player-run-mirrored {
+@keyframes arm-swing-a {
   0%,
+  49.99% {
+    transform: rotate(13deg);
+  }
+  50%,
   100% {
-    transform: scaleX(-1) translateY(0) rotate(1.5deg);
-  }
-  50% {
-    transform: scaleX(-1) translateY(-9px) rotate(-1.5deg) scaleY(1.02);
+    transform: rotate(-13deg);
   }
 }
 
-/* ---- shoot: wind up, then snap through the ball ---- */
-.player--shoot .player__sprite {
-  animation: player-shoot 0.5s var(--snap);
+@keyframes arm-swing-b {
+  0%,
+  49.99% {
+    transform: rotate(-13deg);
+  }
+  50%,
+  100% {
+    transform: rotate(13deg);
+  }
 }
 
-@keyframes player-shoot {
+@keyframes run-bounce {
+  0%,
+  49.99% {
+    transform: rotateY(var(--yaw, 0deg)) rotate(var(--lean, 0deg)) translateY(0);
+  }
+  50%,
+  100% {
+    transform: rotateY(var(--yaw, 0deg)) rotate(var(--lean, 0deg)) translateY(-1px);
+  }
+}
+
+/* ---- shoot: anticipation, then a fast strike through the ball ---- */
+.player--shoot .player__leg--front {
+  animation: shoot-leg 0.5s var(--snap);
+}
+
+.player--shoot .player__body {
+  animation: shoot-lean 0.5s var(--snap);
+}
+
+@keyframes shoot-leg {
   0% {
     transform: rotate(0deg);
   }
-  28% {
-    transform: rotate(-9deg) translateX(-5px) scaleY(0.98);
+  30% {
+    transform: rotate(-40deg);
   }
-  52% {
-    transform: rotate(11deg) translateX(8px) scaleY(1.02);
+  55% {
+    transform: rotate(62deg);
   }
   100% {
     transform: rotate(0deg);
+  }
+}
+
+@keyframes shoot-lean {
+  30% {
+    transform: rotateY(var(--yaw, 0deg)) rotate(-8deg);
+  }
+  55% {
+    transform: rotateY(var(--yaw, 0deg)) rotate(9deg);
   }
 }
 
 /* ---- pass: a shorter, inside-foot version of the same move ---- */
-.player--pass .player__sprite {
-  animation: player-pass 0.4s var(--snap);
+.player--pass .player__leg--front {
+  animation: pass-leg 0.4s var(--snap);
 }
 
-@keyframes player-pass {
+@keyframes pass-leg {
   0% {
     transform: rotate(0deg);
   }
   35% {
-    transform: rotate(-5deg) translateX(-3px);
+    transform: rotate(-20deg);
   }
   60% {
-    transform: rotate(6deg) translateX(5px);
+    transform: rotate(32deg);
   }
   100% {
     transform: rotate(0deg);
@@ -164,33 +187,42 @@
 }
 
 /* ---- receive: absorb the ball, weight back ---- */
-.player--receive .player__sprite {
-  animation: player-receive 0.42s var(--snap);
+.player--receive .player__body {
+  animation: receive-absorb 0.42s var(--snap);
 }
 
-@keyframes player-receive {
+@keyframes receive-absorb {
   40% {
-    transform: translateX(7px) scaleY(0.96) rotate(3deg);
+    transform: rotateY(var(--yaw, 0deg)) translateX(2px) scaleY(0.95);
   }
 }
 
-/* ---- celebrate: repeated hop ---- */
-.player--celebrate .player__sprite {
-  animation: player-celebrate 0.66s var(--pop) infinite;
+/* ---- celebrate: arms up, repeated hop ---- */
+.player--celebrate .player__body {
+  animation: celebrate-hop 0.62s var(--pop) infinite;
 }
 
-@keyframes player-celebrate {
+.player--celebrate .player__arm--front {
+  transform: rotate(-150deg);
+}
+
+.player--celebrate .player__arm--back {
+  transform: rotate(150deg);
+}
+
+@keyframes celebrate-hop {
   0%,
   100% {
     transform: translateY(0) rotate(-2deg);
   }
-  45% {
-    transform: translateY(-20px) rotate(2deg) scaleY(1.03);
+  50% {
+    transform: translateY(-3px) rotate(2deg);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .player__sprite {
+  .player__body,
+  .player__limb {
     animation: none !important;
   }
 }
