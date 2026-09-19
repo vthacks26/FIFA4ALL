@@ -1,0 +1,4 @@
+{
+  "name": "FIFA4ALL",
+  "install": "bash scripts/setup.sh"
+}

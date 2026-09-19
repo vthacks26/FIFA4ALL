@@ -1,0 +1,8 @@
+# FIFA4ALL core dependencies (headless-friendly; used for cloud dev + CI)
+#
+# mediapipe brings in a matching opencv-contrib-python build, so we do not pin
+# opencv separately here. All of these import and run headlessly given the
+# system GL/EGL libraries installed by scripts/setup.sh.
+mediapipe==1.0.1
+numpy==2.5.3
+pytest==9.1.1
