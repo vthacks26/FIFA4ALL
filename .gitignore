@@ -15,3 +15,6 @@ recordings/
 *.mov
 *.avi
 .gstack/
+
+# Agent worktrees are transient and must never be committed.
+.claude/worktrees/
