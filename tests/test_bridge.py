@@ -201,6 +201,58 @@ class BridgeServerTests(unittest.TestCase):
         with urllib.request.urlopen(self.url("/"), timeout=5) as response:
             html = response.read().decode("utf-8")
         self.assertIn("<div id=\"root\">", html)
+        self.assertIn("FIFA4ALL", html)
+
+
+class OrientationLaunchTests(unittest.TestCase):
+    def test_intro_url_is_localhost_root(self) -> None:
+        from bridge.server import orientation_ui_url
+
+        self.assertEqual(orientation_ui_url(), "http://127.0.0.1:8765/")
+        self.assertEqual(orientation_ui_url(9000), "http://127.0.0.1:9000/")
+
+    def test_preview_opens_default_browser_to_intro(self) -> None:
+        from unittest.mock import patch
+
+        from bridge.server import maybe_open_orientation_ui
+
+        with patch("bridge.server.webbrowser.open", return_value=True) as opened:
+            self.assertTrue(maybe_open_orientation_ui(preview=True, port=8765))
+        opened.assert_called_once_with("http://127.0.0.1:8765/", new=1, autoraise=True)
+
+    def test_no_preview_does_not_open_browser(self) -> None:
+        from unittest.mock import patch
+
+        from bridge.server import maybe_open_orientation_ui
+
+        with patch("bridge.server.webbrowser.open") as opened:
+            self.assertFalse(maybe_open_orientation_ui(preview=False, port=8765))
+        opened.assert_not_called()
+
+    def test_run_product_preview_opens_browser_without_webcam(self) -> None:
+        from unittest.mock import patch
+
+        from bridge.server import ControlHub, run_product
+
+        with patch("bridge.server.webbrowser.open", return_value=True) as opened:
+            with patch.object(ControlHub, "run", return_value=None):
+                code = run_product(preview=True, mock=True, port=0, armed=False)
+        self.assertEqual(code, 0)
+        opened.assert_called_once()
+        url = opened.call_args[0][0]
+        self.assertTrue(url.startswith("http://127.0.0.1:"))
+        self.assertTrue(url.endswith("/"))
+
+    def test_run_product_no_preview_serves_ui_without_opening_browser(self) -> None:
+        from unittest.mock import patch
+
+        from bridge.server import ControlHub, run_product
+
+        with patch("bridge.server.webbrowser.open") as opened:
+            with patch.object(ControlHub, "run", return_value=None):
+                code = run_product(preview=False, mock=True, port=0, armed=False)
+        self.assertEqual(code, 0)
+        opened.assert_not_called()
 
 
 if __name__ == "__main__":

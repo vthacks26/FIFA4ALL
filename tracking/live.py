@@ -179,12 +179,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--no-preview",
         action="store_true",
-        help="do not open the face / look-axis overlay",
+        help=(
+            "inject + serve the orientation UI without the overlay or opening a "
+            "browser (keeps Luna focused)"
+        ),
     )
     parser.add_argument(
         "--preview",
         action="store_true",
-        help="show face + WASD nose-joystick overlay (non-activating on macOS)",
+        help=(
+            "show the look-axis overlay and open the orientation intro in your "
+            "default browser"
+        ),
     )
     parser.add_argument(
         "--ui-port",

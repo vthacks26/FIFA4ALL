@@ -22,9 +22,12 @@ import json
 import mimetypes
 import sys
 import threading
+import urllib.error
+import urllib.request
+import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from time import monotonic
+from time import monotonic, sleep
 from typing import Any
 from urllib.parse import urlparse
 
@@ -36,6 +39,59 @@ from tracking.controls import DIRECTION_KEYS
 
 DEFAULT_PORT = 8765
 UI_DIST = Path(__file__).resolve().parent.parent / "onboarding" / "dist"
+
+
+def orientation_ui_url(port: int = DEFAULT_PORT) -> str:
+    """Intro / welcome page served by this process (no Vite / npm run dev)."""
+
+    return f"http://127.0.0.1:{port}/"
+
+
+def wait_until_serving(port: int, timeout: float = 2.0) -> bool:
+    """True once GET / answers, so the first browser load is not connection-refused."""
+
+    url = orientation_ui_url(port)
+    deadline = monotonic() + timeout
+    while monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=0.25):
+                return True
+        except urllib.error.HTTPError:
+            return True  # server answered (missing dist is still "up")
+        except (OSError, urllib.error.URLError):
+            sleep(0.05)
+    return False
+
+
+def open_orientation_ui(port: int = DEFAULT_PORT) -> bool:
+    """Open the intro page in the user's default browser.
+
+    Returns True if the platform accepted the open request.
+    """
+
+    url = orientation_ui_url(port)
+    try:
+        opened = bool(webbrowser.open(url, new=1, autoraise=True))
+    except Exception as exc:  # never fail the live product over a browser helper
+        print(f"Could not open a browser ({exc}). Open {url} yourself.", flush=True)
+        return False
+    if opened:
+        print(f"Opened orientation UI in your default browser: {url}", flush=True)
+    else:
+        print(f"Open the orientation UI: {url}", flush=True)
+    return opened
+
+
+def maybe_open_orientation_ui(*, preview: bool, port: int) -> bool:
+    """Open the intro page only for ``--preview``.
+
+    ``--no-preview`` still serves the same URL, but must not steal keyboard
+    focus from Luna by raising a browser.
+    """
+
+    if not preview:
+        return False
+    return open_orientation_ui(port)
 
 
 class ControlHub:
@@ -357,11 +413,23 @@ def run_product(
         camera_line = f"{chosen.index}:{chosen.name!r}"
 
     server, hub = build_server(source, port, session)
+    bound_port = int(server.server_address[1])
+    intro = orientation_ui_url(bound_port)
     banner = [
-        f"FIFA4ALL live on http://127.0.0.1:{port}/  camera={camera_line}",
+        f"FIFA4ALL live on {intro}  camera={camera_line}",
         "  same process: Quartz WASD / Space hold / wink-L hold",
         "  overlay RESET and POST /calibrate recapture neutral",
     ]
+    if preview:
+        banner.append(
+            "  --preview opens that intro URL in your default browser "
+            "(no npm run dev)"
+        )
+    else:
+        banner.append(
+            "  --no-preview still serves that URL but does not open a browser, "
+            "so Luna can keep keyboard focus"
+        )
     if not mock:
         banner.append(
             "  inject starts ARMED; the orientation HUD can disarm without "
@@ -370,6 +438,9 @@ def run_product(
     print("\n".join(banner), flush=True)
 
     threading.Thread(target=server.serve_forever, name="bridge-http", daemon=True).start()
+    if preview:
+        wait_until_serving(bound_port)
+    maybe_open_orientation_ui(preview=preview, port=bound_port)
     try:
         hub.run(on_frame=_build_overlay(hub) if preview else None)
     except KeyboardInterrupt:
@@ -386,8 +457,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--mock", action="store_true", help="UI-only mock; no webcam")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
-    parser.add_argument("--preview", action="store_true")
-    parser.add_argument("--no-preview", action="store_true")
+    parser.add_argument(
+        "--preview",
+        action="store_true",
+        help="show the look-axis overlay and open the orientation intro in the default browser",
+    )
+    parser.add_argument(
+        "--no-preview",
+        action="store_true",
+        help="inject + serve the UI without overlay or opening a browser (keeps Luna focused)",
+    )
     parser.add_argument(
         "--overlay",
         action="store_true",

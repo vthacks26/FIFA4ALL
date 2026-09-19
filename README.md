@@ -33,26 +33,28 @@ Always run the live module from the **repository root** so `python -m tracking.l
 
 ## Run
 
-Preview overlay (face, look-axis, live keys, Reset):
+One command starts inject, the orientation website, and (with `--preview`) the look-axis overlay. It also opens the intro/welcome page in your default browser. You do **not** need `npm run dev`.
 
 ```bash
 MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --preview
 ```
 
-Headless inject (same mapping, no overlay window):
+That opens **http://127.0.0.1:8765/** — the Welcome / training-camp screen (`WELCOME`). Same process serves every later orientation route from that origin.
+
+Headless inject (same mapping and UI server, **no** overlay and **no** browser — so Luna can keep keyboard focus):
 
 ```bash
 MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --no-preview
 ```
 
-`--no-preview` wins if both flags are passed. Quit with **Ctrl+C**. Lost face tracking releases every held key.
+`--no-preview` still serves http://127.0.0.1:8765/ ; open it yourself only when you are not mid-match. `--no-preview` wins if both flags are passed. Quit with **Ctrl+C**. Lost face tracking releases every held key.
 
 Do not start this from another directory, and do not point OpenCV at Continuity Camera. The process enumerates AVFoundation devices by name and opens only a built-in Mac camera (`MacBook Pro Camera` / FaceTime / built-in). If index `0` is an iPhone, that index is skipped.
 
 ## Play on Luna
 
-1. Grant Camera and Accessibility (below), then start `--preview` or `--no-preview`.
-2. Open **Google Chrome** → Amazon Luna → EA Sports FC.
+1. Grant Camera and Accessibility (below), then start `--preview` (demo / orientation) or `--no-preview` (match, Luna already focused).
+2. Open **Google Chrome** → Amazon Luna → EA Sports FC. (`--preview` already opened the orientation intro in your default browser; click Luna when you are ready to play.)
 3. **Click the game** so Chrome / Luna is focused. OS keys go to the frontmost app; if Chrome is not frontmost, the injector warns and keys will land somewhere else.
 4. Sit straight in frame. Tap the orange **RESET** on the `FIFA4ALL look axis` overlay (preview mode) so the next valid face pose is neutral.
 5. Look, open your mouth, or wink. Holds stay down until you return to center / close your mouth / stop winking.
@@ -69,7 +71,9 @@ The first valid nose point after start or Reset is the joystick center. Returnin
 
 ### Overlay
 
-`--preview` opens a floating, non-activating window titled **`FIFA4ALL look axis`**. It shows the MacBook camera frame, face landmarks, the WASD look-axis, current keys, and an orange **RESET** control (plus a real AppKit Reset button on the window). Sit straight, then tap **RESET** to clear the pose baseline and recapture neutral.
+`--preview` opens two things: your default browser at **http://127.0.0.1:8765/** (the intro website), and a floating, non-activating window titled **`FIFA4ALL look axis`**. The overlay shows the MacBook camera frame, face landmarks, the WASD look-axis, current keys, and an orange **RESET** control (plus a real AppKit Reset button on the window). Sit straight, then tap **RESET** to clear the pose baseline and recapture neutral.
+
+`--no-preview` does not open a browser, because raising a window would steal keyboard focus from Luna.
 
 The overlay is meant to stay above Luna without stealing key focus. **Exclusive fullscreen still covers it.** Press **Esc** to leave exclusive fullscreen if you need to see Reset or the look-axis HUD.
 
@@ -108,12 +112,13 @@ More tracking notes: [`tracking/README.md`](tracking/README.md). Orientation scr
 
 `python -m tracking.live` is the only match path. The same process owns the
 MacBook camera, Quartz HID holds, the look-axis overlay + RESET, and the
-orientation UI at http://127.0.0.1:8765/ . Do not start `bridge.server` or
-`npm run dev` for a match — that would be a second, disconnected stack.
+orientation UI at http://127.0.0.1:8765/ . `--preview` opens that intro URL
+in the default browser. Do not start `bridge.server` or `npm run dev` for a
+match — that would be a second, disconnected stack.
 
 ```bash
 MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --preview
-# or without the overlay window:
+# inject + UI server, no overlay and no browser (keeps Luna focused):
 MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --no-preview
 ```
 
