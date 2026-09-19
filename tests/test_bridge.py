@@ -554,10 +554,12 @@ class OrientationCameraFeedTests(unittest.TestCase):
         source = (root / "onboarding" / "src" / "control" / "source.ts").read_text(
             encoding="utf-8"
         )
-        self.assertIn("${BRIDGE_URL}/stream.mjpg", frame)
+        self.assertIn('${BRIDGE_URL}/stream.mjpg', frame)
+        self.assertIn("src={`${BRIDGE_URL}/stream.mjpg`}", frame)
         self.assertIn("hasVideo={config.has_video}", center)
         self.assertIn('"http://127.0.0.1:8765"', source)
-        self.assertNotIn("getUserMedia", frame)
+        self.assertNotIn("navigator.mediaDevices", frame)
+        self.assertNotIn("getUserMedia(", frame)
 
     def test_reticle_spans_the_frame_so_it_cannot_cover_the_feed(self) -> None:
         from pathlib import Path
@@ -570,9 +572,8 @@ class OrientationCameraFeedTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("viewBox={`0 0 ${width} ${height}`}", reticle)
-        self.assertIn(".reticle *", css)
-        self.assertNotIn(".reticle svg *", css)
-        self.assertNotIn("width: 0", css)
+        self.assertIn(".reticle * {\n  vector-effect: non-scaling-stroke;\n}", css)
+        self.assertNotIn("width: 0;\n  height: 0;", css)
 
 
 class WebcamCalibrateTests(unittest.TestCase):
