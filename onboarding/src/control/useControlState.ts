@@ -12,6 +12,7 @@ import {
   IDLE_STATE,
   type BridgeConfig,
   type ControlState,
+  type DeadzoneMode,
 } from "../types";
 import {
   BRIDGE_URL,
@@ -35,6 +36,36 @@ export interface ControlChannel {
   readonly calibrate: () => void;
   /** Start or stop sending real key events to the focused application. */
   readonly setArmed: (next: boolean) => void;
+  /** Current nose-deadzone mode (fixed default, or follow). */
+  readonly deadzoneMode: DeadzoneMode;
+  /** Persist the mode and apply it to live game control on this process. */
+  readonly setDeadzoneMode: (next: DeadzoneMode) => void;
+}
+
+const DEADZONE_STORAGE = "fifa4all.deadzoneMode";
+
+function readStoredDeadzoneMode(): DeadzoneMode | null {
+  try {
+    const stored = window.localStorage.getItem(DEADZONE_STORAGE);
+    if (stored === null) return null;
+    const parsed: unknown = JSON.parse(stored);
+    if (parsed === "fixed" || parsed === "follow") return parsed;
+  } catch {
+    // Private mode or a corrupt value; fall through to the process default.
+  }
+  return null;
+}
+
+function writeStoredDeadzoneMode(mode: DeadzoneMode): void {
+  try {
+    window.localStorage.setItem(DEADZONE_STORAGE, JSON.stringify(mode));
+  } catch {
+    // Persistence is best-effort; the live POST still applies this session.
+  }
+}
+
+function isDeadzoneMode(value: unknown): value is DeadzoneMode {
+  return value === "fixed" || value === "follow";
 }
 
 export function useControlState(): ControlChannel {
@@ -44,6 +75,9 @@ export function useControlState(): ControlChannel {
   const [error, setError] = useState<string | null>(null);
   const [useMock, setUseMock] = useState(false);
   const [mockInput, setMockInput] = useState<MockInput>(IDLE_MOCK_INPUT);
+  const [deadzoneMode, setDeadzoneModeState] = useState<DeadzoneMode>(
+    () => readStoredDeadzoneMode() ?? "fixed",
+  );
 
   // Hysteresis and edge detection need the previous state without re-running
   // the effect on every frame.
@@ -63,6 +97,10 @@ export function useControlState(): ControlChannel {
         setConfig(loaded);
         setStatus("live");
         setError(null);
+        const stored = readStoredDeadzoneMode();
+        if (stored === null && isDeadzoneMode(loaded.deadzone_mode)) {
+          setDeadzoneModeState(loaded.deadzone_mode);
+        }
       })
       .catch((reason: unknown) => {
         if (cancelled) return;
@@ -91,13 +129,45 @@ export function useControlState(): ControlChannel {
       }
       setError(null);
       setStatus("live");
-      setState(payload as ControlState);
+      const next = payload as ControlState;
+      setState(next);
+      if (isDeadzoneMode(next.deadzone_mode)) {
+        setDeadzoneModeState(next.deadzone_mode);
+      }
     };
     stream.onerror = () => {
       setStatus("error");
       setError("lost connection to the tracking bridge");
     };
     return () => stream.close();
+  }, [useMock, status]);
+
+  // A stored website choice wins over the process default, and POSTs onto
+  // the same machine that injects WASD so play picks it up without a restart.
+  useEffect(() => {
+    if (useMock || status !== "live") return;
+    const stored = readStoredDeadzoneMode();
+    if (stored === null) return;
+    void fetch(`${BRIDGE_URL}/deadzone-mode`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: stored }),
+    })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const body: unknown = await response.json();
+        const mode =
+          typeof body === "object" && body !== null && "deadzone_mode" in body
+            ? (body as { deadzone_mode: unknown }).deadzone_mode
+            : stored;
+        if (isDeadzoneMode(mode)) {
+          setDeadzoneModeState(mode);
+          setConfig((current) => ({ ...current, deadzone_mode: mode }));
+        }
+      })
+      .catch(() => {
+        // Toggle still shows the stored choice; the next click retries.
+      });
   }, [useMock, status]);
 
   // Mock loop, driven at display rate so animations stay in step.
@@ -142,9 +212,37 @@ export function useControlState(): ControlChannel {
     [useMock],
   );
 
+  const setDeadzoneMode = useCallback(
+    (next: DeadzoneMode) => {
+      writeStoredDeadzoneMode(next);
+      setDeadzoneModeState(next);
+      setConfig((current) => ({ ...current, deadzone_mode: next }));
+      if (useMock) return;
+      void fetch(`${BRIDGE_URL}/deadzone-mode`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: next }),
+      })
+        .then(async (response) => {
+          if (response.ok) {
+            setError(null);
+            return;
+          }
+          const body: unknown = await response.json();
+          const reason =
+            typeof body === "object" && body !== null && "error" in body
+              ? String((body as { error: unknown }).error)
+              : "could not change deadzone mode";
+          setError(reason);
+        })
+        .catch(() => setError("could not reach the bridge to change deadzone mode"));
+    },
+    [useMock],
+  );
+
   return {
     state,
-    config: useMock ? MOCK_CONFIG : config,
+    config: useMock ? { ...MOCK_CONFIG, deadzone_mode: deadzoneMode } : config,
     status: useMock ? "mock" : status,
     error,
     mockInput,
@@ -153,6 +251,8 @@ export function useControlState(): ControlChannel {
     setUseMock,
     calibrate,
     setArmed,
+    deadzoneMode,
+    setDeadzoneMode,
   };
 }
 

@@ -13,6 +13,7 @@ from tracking.controls import (
     ControlThresholds,
     classify_direction,
     hold_labels,
+    parse_deadzone_mode,
 )
 
 NEUTRAL = {"mouth_opening": 0.0, "left_wink": 0.0}
@@ -729,6 +730,109 @@ class ChannelViewTests(unittest.TestCase):
             nose=CENTER, features={**NEUTRAL, "mouth_opening": 0.2}, tracking_valid=True
         )
         self.assertTrue(result["channels"]["mouth_open"]["fired"])
+
+
+class FollowDeadzoneTests(unittest.TestCase):
+    """Trailing deadzone: further look pulls the zone; a short opposite move stops."""
+
+    FAR_EAST = at(0.20, 0.0)
+
+    def follow_machine(self) -> ControlStateMachine:
+        state = machine()
+        state.set_deadzone_mode("follow")
+        return state
+
+    def test_default_mode_is_fixed_center(self) -> None:
+        state = machine()
+        self.assertEqual(state.deadzone_mode, "fixed")
+        result = state.update(nose=CENTER, features=NEUTRAL, tracking_valid=True)
+        self.assertEqual(result["deadzone_mode"], "fixed")
+
+    def test_parse_rejects_unknown_modes(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_deadzone_mode("sticky")
+
+    def test_fixed_mode_still_requires_return_to_the_calibrated_center(self) -> None:
+        state = machine()
+        state.update(nose=self.FAR_EAST, features=NEUTRAL, tracking_valid=True)
+        # Halfway back from a far look is still well outside the original zone.
+        halfway = at(0.10, 0.0)
+        result = state.update(nose=halfway, features=NEUTRAL, tracking_valid=True)
+        self.assertEqual(result["keys"], ["D"])
+        self.assertFalse(result["centered"])
+
+    def test_follow_mode_releases_after_a_small_opposite_move(self) -> None:
+        state = self.follow_machine()
+        moving = state.update(nose=self.FAR_EAST, features=NEUTRAL, tracking_valid=True)
+        self.assertEqual(moving["keys"], ["D"])
+        self.assertFalse(moving["centered"])
+
+        # A short move back toward center, not all the way to calibrate home.
+        slight_back = at(0.20 - 0.03, 0.0)
+        result = state.update(nose=slight_back, features=NEUTRAL, tracking_valid=True)
+        self.assertEqual(result["keys"], [])
+        self.assertTrue(result["centered"])
+        self.assertNotEqual(state.center, CENTER)
+        self.assertEqual(state.home, CENTER)
+
+    def test_same_small_move_does_not_release_in_fixed_mode(self) -> None:
+        state = machine()
+        state.update(nose=self.FAR_EAST, features=NEUTRAL, tracking_valid=True)
+        slight_back = at(0.20 - 0.03, 0.0)
+        result = state.update(nose=slight_back, features=NEUTRAL, tracking_valid=True)
+        self.assertEqual(result["keys"], ["D"])
+        self.assertFalse(result["centered"])
+
+    def test_follow_still_moves_while_just_outside_the_pulled_zone(self) -> None:
+        state = self.follow_machine()
+        state.update(nose=self.FAR_EAST, features=NEUTRAL, tracking_valid=True)
+        # Stay at the far point: the pulled zone sits just behind the nose.
+        held = state.update(nose=self.FAR_EAST, features=NEUTRAL, tracking_valid=True)
+        self.assertEqual(held["keys"], ["D"])
+        self.assertAlmostEqual(held["nose"]["x"], state.thresholds.exit_radius, places=3)
+
+    def test_calibrate_resets_a_followed_deadzone_to_the_new_home(self) -> None:
+        state = self.follow_machine()
+        state.update(nose=self.FAR_EAST, features=NEUTRAL, tracking_valid=True)
+        state.calibrate(self.FAR_EAST)
+        result = state.update(nose=self.FAR_EAST, features=NEUTRAL, tracking_valid=True)
+        self.assertTrue(result["centered"])
+        self.assertEqual(result["keys"], [])
+        self.assertEqual(state.center, self.FAR_EAST)
+        self.assertEqual(state.home, self.FAR_EAST)
+
+    def test_eyebrow_reset_clears_follow_drag(self) -> None:
+        state = self.follow_machine()
+        rest = {**NEUTRAL, "eyebrow_raise": 0.10}
+        state.update(nose=CENTER, features=rest, tracking_valid=True, now=-1.0)
+        state.update(nose=self.FAR_EAST, features=rest, tracking_valid=True, now=0.0)
+        raised = {**NEUTRAL, "eyebrow_raise": 0.14}
+        result = state.update(nose=self.FAR_EAST, features=raised, tracking_valid=True, now=0.1)
+        self.assertTrue(result["eyebrow"]["fired"])
+        self.assertTrue(result["centered"])
+        self.assertEqual(state.home, self.FAR_EAST)
+
+    def test_switching_back_to_fixed_snaps_the_zone_to_home(self) -> None:
+        state = self.follow_machine()
+        state.update(nose=self.FAR_EAST, features=NEUTRAL, tracking_valid=True)
+        self.assertNotEqual(state.center, CENTER)
+        state.set_deadzone_mode("fixed")
+        self.assertEqual(state.deadzone_mode, "fixed")
+        self.assertEqual(state.center, CENTER)
+        result = state.update(nose=self.FAR_EAST, features=NEUTRAL, tracking_valid=True)
+        self.assertEqual(result["keys"], ["D"])
+        # Still need to return to the original calibrated zone.
+        slight_back = at(0.20 - 0.03, 0.0)
+        still = state.update(nose=slight_back, features=NEUTRAL, tracking_valid=True)
+        self.assertEqual(still["keys"], ["D"])
+
+    def test_first_frame_records_home_in_follow_mode(self) -> None:
+        state = ControlStateMachine()
+        state.set_deadzone_mode("follow")
+        result = state.update(nose=(0.3, 0.7), features=NEUTRAL, tracking_valid=True)
+        self.assertTrue(result["centered"])
+        self.assertEqual(state.home, (0.3, 0.7))
+        self.assertEqual(state.center, (0.3, 0.7))
 
 
 if __name__ == "__main__":

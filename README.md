@@ -91,7 +91,24 @@ You do not need to recreate `.venv` or reinstall unless you deleted it.
 | Wink (either eye; blinks rejected) | `L` | Pass (hold while the wink is detected) |
 | Raised eyebrows | — | Recentre / recalibrate pose (same as overlay RESET and `POST /calibrate`) |
 
-The first valid nose point after start or Reset is the joystick center. Returning to that center releases WASD. Combinations are allowed (for example look + shoot).
+The first valid nose point after start or Reset is the joystick center. Combinations are allowed (for example look + shoot).
+
+### Nose deadzone modes
+
+WASD uses a nose deadzone. Two modes are available; **fixed center is the default** so existing play does not change until you switch.
+
+| Mode | Behaviour | How to stop |
+| --- | --- | --- |
+| **Fixed center** (default) | The deadzone stays around the last calibrated center (start, eyebrows, **Find your center**, **Reset center**, overlay **RESET**). | Return into that original zone to release WASD. |
+| **Follow** | Once the nose is just outside the deadzone, further movement in that direction pulls / drags the zone along. | A small opposite-direction move back into the pulled zone stops you — you do not have to return to the original calibrate center. |
+
+Switch at runtime from the live website HUD (**Deadzone → Fixed center / Follow**). The choice is stored in the browser and POSTed to this `tracking.live` process, so it applies to the keys already being injected. Recentre / calibrate still resets the center as today.
+
+Optional startup flag (the website toggle can still change it afterwards):
+
+```bash
+MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --preview --deadzone-mode follow
+```
 
 **Exclusive fullscreen covers the overlay.** Press **Esc** if you need to see the look-axis HUD.
 
@@ -110,4 +127,4 @@ More tracking notes: [`tracking/README.md`](tracking/README.md). Orientation scr
 - **Shooting** waits 200ms after mouth-open is detected (open/reset hysteresis still applies) before holding Space, so FIFA's charge does not start on a brief open. If the mouth closes before 200ms, Space is never pressed. After Space is down, a longer open is a more powerful shot. Calibration samples the resting mouth, because a mouth at rest does not read zero and a fixed threshold can latch Space open permanently.
 - **Passing** accepts either eye. A blink is rejected by requiring the other eye to stay open.
 - **Recentre** by raising your eyebrows (or overlay **RESET** / website **Find your center**). Detection is the brow-to-eyelid gap above the resting value sampled on the first valid face and again on click-calibrate, so a normal open mouth used for shoot does not reset. The trigger is edge-latched: a held raise fires once until you lower your brows.
-- **Movement** releases every key when tracking is lost, so a lost face cannot leave the player running.
+- **Movement** releases every key when tracking is lost, so a lost face cannot leave the player running. In **fixed** deadzone mode, WASD releases when the nose returns to the calibrated center zone. In **follow** mode, further look drags that zone so a short opposite move is enough to stop. Switch on the live HUD; default is fixed.

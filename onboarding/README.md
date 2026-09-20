@@ -61,6 +61,7 @@ python -m bridge.server --mock
 | `POST /calibrate` | set the current nose and resting mouth as neutral |
 | `POST /arm` | start sending real key events to the focused application |
 | `POST /disarm` | stop sending key events and release everything held |
+| `POST /deadzone-mode` | `{"mode":"fixed"}` or `{"mode":"follow"}` — applies to this process immediately |
 | `POST /mock` | drive the mock source (mock mode only) |
 
 Control state matches the contract in `TECHNICAL_SPEC.md`:
@@ -115,7 +116,7 @@ output layer turns control state into real key events.
 
 | Gesture | Key | Behaviour |
 | --- | --- | --- |
-| Head direction | W A S D | held while the direction is active, released at centre |
+| Head direction | W A S D | held while the direction is active; released at the (fixed or followed) deadzone |
 | Mouth open | Space | Space after 200ms open; held while open, so longer open is a more powerful shot |
 | Wink | L | single tap; an eye held closed never repeats |
 
@@ -154,3 +155,14 @@ makes the player walk with no input. If the nose holds still outside the dead
 zone for 3.5 seconds that is drift rather than intent, so neutral is re-set
 there and the HUD confirms it. The window is deliberately longer than a steering
 input is ever held perfectly still.
+
+### Nose deadzone
+
+The live HUD has a **Deadzone** switch (persisted in `localStorage` as
+`fifa4all.deadzoneMode` and applied with `POST /deadzone-mode`):
+
+- **Fixed center** (default): the zone stays on the last calibrate / RESET home.
+  Return into that original zone to release WASD.
+- **Follow**: once the nose is just outside, further look pulls the zone. A
+  small opposite move stops you. Recentre (eyebrows, Find your center, Reset
+  center, overlay RESET) still resets the home as today.

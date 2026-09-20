@@ -139,6 +139,56 @@ class BridgeServerTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(body["ok"])
 
+    def test_config_publishes_the_deadzone_mode(self) -> None:
+        with urllib.request.urlopen(self.url("/config"), timeout=5) as response:
+            config = json.loads(response.read())
+        self.assertEqual(config["deadzone_mode"], "fixed")
+
+    def test_deadzone_mode_endpoint_switches_the_live_machine(self) -> None:
+        try:
+            status, body = post(self.url("/deadzone-mode"), {"mode": "follow"})
+            self.assertEqual(status, 200)
+            self.assertEqual(body["deadzone_mode"], "follow")
+            self.assertEqual(self.source.machine.deadzone_mode, "follow")
+            with urllib.request.urlopen(self.url("/config"), timeout=5) as response:
+                self.assertEqual(json.loads(response.read())["deadzone_mode"], "follow")
+        finally:
+            post(self.url("/deadzone-mode"), {"mode": "fixed"})
+
+    def test_deadzone_mode_endpoint_rejects_unknown_values(self) -> None:
+        status, body = post(self.url("/deadzone-mode"), {"mode": "sticky"})
+        self.assertEqual(status, 400)
+        self.assertIn("deadzone_mode", str(body.get("error", "")))
+        self.assertEqual(self.source.machine.deadzone_mode, "fixed")
+
+    def test_follow_deadzone_releases_injected_keys_on_a_short_return(self) -> None:
+        """Website toggle must change the same machine InputSession reads."""
+
+        self.hub.session.arm()
+        try:
+            self.reset_center()
+            post(self.url("/deadzone-mode"), {"mode": "follow"})
+            post(
+                self.url("/mock"),
+                {"tracking": True, "nose": {"x": 0.20, "y": 0.0}, "mouth": 0.0, "wink": 0.0},
+            )
+            far = self.read_one_event()
+            self.assertEqual(far["keys"], ["D"])
+            self.assertIn("D", self.keyboard.held)
+
+            post(
+                self.url("/mock"),
+                {"tracking": True, "nose": {"x": 0.17, "y": 0.0}, "mouth": 0.0, "wink": 0.0},
+            )
+            released = self.read_one_event()
+            self.assertEqual(released["keys"], [])
+            self.assertTrue(released["centered"])
+            self.assertEqual(self.keyboard.held, set())
+        finally:
+            post(self.url("/deadzone-mode"), {"mode": "fixed"})
+            self.hub.session.disarm()
+            self.keyboard.reset()
+
     def test_site_calibrate_is_the_same_session_as_injected_keys(self) -> None:
         """POST /calibrate recentres the tracker that InputSession injects."""
 

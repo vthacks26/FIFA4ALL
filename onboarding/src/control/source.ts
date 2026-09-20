@@ -23,6 +23,7 @@ export const MOCK_CONFIG: BridgeConfig = {
     NW: ["W", "A"],
   },
   has_video: false,
+  deadzone_mode: "fixed",
 };
 
 /** Simulated inputs the dev panel can drive without a webcam. */
@@ -84,6 +85,7 @@ export function deriveMockState(
       confidence: Math.min(winkValue / thresholds.wink_on, 1),
     },
     tracking: true,
+    deadzone_mode: config.deadzone_mode ?? "fixed",
   };
 }
 

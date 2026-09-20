@@ -17,7 +17,7 @@ from abc import ABC, abstractmethod
 from time import monotonic, sleep
 from typing import Any, Iterator
 
-from tracking.controls import ControlStateMachine, ControlThresholds
+from tracking.controls import ControlStateMachine, ControlThresholds, DeadzoneMode, parse_deadzone_mode
 
 
 class ControlSource(ABC):
@@ -35,6 +35,11 @@ class ControlSource(ABC):
         """Request that the next tracked nose position becomes neutral."""
 
         self.machine.calibrate(None)
+
+    def set_deadzone_mode(self, mode: object) -> DeadzoneMode:
+        """Switch fixed vs follow on the live machine this process injects."""
+
+        return self.machine.set_deadzone_mode(parse_deadzone_mode(mode))
 
     def stop(self) -> None:
         """Release any hardware. Safe to call more than once."""
