@@ -348,6 +348,26 @@ class ControlStateMachine:
         self._still_since = None
         self._still_anchor = None
 
+    def clear_gestures(self, now: float | None = None) -> None:
+        """Release expression latches and WASD without moving the centre.
+
+        Auto-swap calls this when the look-axis source changes so a face wink
+        cannot leave L held after a hand takes over, and an open palm cannot
+        leave Space held after the hand leaves the frame.
+        """
+
+        moment = monotonic() if now is None else now
+        self._moving = False
+        self._direction = None
+        self._still_since = None
+        self._still_anchor = None
+        self._wink_eye = None
+        self._mouth.update(None, moment)
+        self._wink.update(None, moment)
+        for trigger in self._extra.values():
+            trigger.update(None, moment)
+        self._brow.update(None, moment)
+
     def set_deadzone_mode(self, mode: DeadzoneMode | str) -> DeadzoneMode:
         """Switch fixed vs follow at runtime. Fixed snaps back to last home."""
 
@@ -761,6 +781,10 @@ class ControlStateMachine:
             "tracking": tracking,
             "recentred": self.recentred,
             "deadzone_mode": self.deadzone_mode,
+            # Auto-swap publishes "face" or "hand". Direct machine.update
+            # callers (tests, mock source) stay on face unless a router overwrites.
+            "input_source": "face",
+            "palm_point": None,
         }
         for channel_name, legacy_key in LEGACY_CHANNEL_KEYS.items():
             state[legacy_key] = channels[channel_name]

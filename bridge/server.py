@@ -552,7 +552,8 @@ def run_product(
     intro = orientation_ui_url(bound_port)
     banner = [
         f"FIFA4ALL live on {intro}  camera={camera_line}",
-        "  same process: Quartz WASD / Space hold / wink-L hold",
+        "  same process: Quartz WASD / Space hold / wink-L or two-finger L hold",
+        "  auto-swap FACE/HAND (no toggle); overlay shows the active source",
         "  overlay RESET and POST /calibrate recapture neutral "
         "(eyebrow-raise recenter temporarily disabled)",
         f"  deadzone={source.machine.deadzone_mode} "

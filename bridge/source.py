@@ -18,6 +18,7 @@ from time import monotonic, sleep
 from typing import Any, Iterator
 
 from tracking.controls import ControlStateMachine, ControlThresholds, DeadzoneMode, parse_deadzone_mode
+from tracking.hands import AutoSwapRouter, landmark_points, mirror_points
 
 
 class ControlSource(ABC):
@@ -131,6 +132,7 @@ class WebcamSource(ControlSource):
         self.jpeg_quality = jpeg_quality
         self._tracker: Any | None = None
         self._recalibrate = False
+        self.router = AutoSwapRouter()
         # Latest mirrored BGR frame, for the on-screen overlay. The MJPEG bytes
         # are no use there because the overlay draws before encoding.
         self.last_frame: Any | None = None
@@ -140,6 +142,9 @@ class WebcamSource(ControlSource):
         # Overlay RESET and POST /calibrate both land here — same machine that
         # InputSession reads for Quartz WASD / Space / L.
         self._recalibrate = True
+        # Drop both look-axis homes so the next nose and the next palm each
+        # recapture centre the way the first valid point does at start.
+        self.router.reset_centers()
 
     def apply_pending_calibrate(
         self,
@@ -167,6 +172,36 @@ class WebcamSource(ControlSource):
         self._recalibrate = False
         return True
 
+    def interpret_frame(
+        self,
+        *,
+        nose: tuple[float, float] | None,
+        values: dict[str, float],
+        face_valid: bool,
+        hand_landmarks: list[Any] | None = None,
+        hand_score: float | None = None,
+        now: float | None = None,
+    ) -> dict[str, object]:
+        """Auto-swap one face+hand observation onto the live control machine.
+
+        Camera-free so tests can cover hand mode without opening the MacBook
+        camera. ``frames`` is the live wrapper around this.
+        """
+
+        hand_points = None
+        if hand_landmarks:
+            hand_points = mirror_points(landmark_points(hand_landmarks))
+        decided = self.router.decide(
+            face_valid=face_valid,
+            nose=nose,
+            face_features=values,
+            hand_points=hand_points,
+            hand_score=hand_score,
+        )
+        calibrate_values = values if decided.source == "face" else {}
+        self.apply_pending_calibrate(decided.look, calibrate_values)
+        return self.router.apply(self.machine, decided, now=now)
+
     def frames(self) -> Iterator[tuple[dict[str, object], bytes | None]]:
         import cv2  # type: ignore[import-not-found]
 
@@ -188,12 +223,12 @@ class WebcamSource(ControlSource):
                 for name, feature in tracked.movement.features.items()
                 if feature.available and feature.value is not None
             }
-
-            self.apply_pending_calibrate(nose, values)
-            state = self.machine.update(
+            state = self.interpret_frame(
                 nose=nose,
-                features=values,
-                tracking_valid=tracked.movement.tracking_valid,
+                values=values,
+                face_valid=tracked.movement.tracking_valid,
+                hand_landmarks=tracked.hand_landmarks,
+                hand_score=tracked.hand_score,
             )
             eyebrow = state.get("eyebrow")
             if isinstance(eyebrow, dict) and eyebrow.get("fired"):

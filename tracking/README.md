@@ -65,13 +65,15 @@ For Quartz OS key holds into the frontmost app (Google Chrome / Luna), MacBook c
 
 `--preview` waits until the UI is listening, then opens
 http://127.0.0.1:8765/ (Welcome / practice / live HUD) with macOS
-`/usr/bin/open` and a **separate** Face + WASD look-axis overlay
-(camera/vision only; non-activating). If the browser does not appear, the
-log prints that URL to click. Recentre from the website
-(**Find your center** / **Reset center**) or the overlay **RESET**.
-Eyebrow-raise recenter is temporarily disabled (`EYEBROW_RECENTRE = False`
-in `tracking/controls.py`; set True to restore). Overlay RESET and site
-calibrate still drive `ControlStateMachine.calibrate` on the live injector.
+`/usr/bin/open` and a **separate** look-axis overlay (camera/vision only;
+non-activating). The overlay labels the auto-swapped source (**FACE** /
+**HAND**) and the **PALM** point in hand mode. Website chrome stays in the
+browser. If the browser does not appear, the log prints that URL to click.
+Recentre from the website (**Find your center** / **Reset center**) or the
+overlay **RESET**. Eyebrow-raise recenter is temporarily disabled
+(`EYEBROW_RECENTRE = False` in `tracking/controls.py`; set True to restore).
+Overlay RESET and site calibrate still drive `ControlStateMachine.calibrate`
+on the live injector.
 
 ```bash
 MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --preview
@@ -83,7 +85,7 @@ Headless inject (same UI server, no overlay, no browser — keeps Luna focused):
 MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --no-preview
 ```
 
-This uses the same nose-joystick / mouth-Space-hold / wink-L mapping as the preview, posted via `CGEventPost(kCGHIDEventTap)`. Live inject waits 200ms after mouth-open is detected before Space key-down; a shorter open never presses. Pass waits the same 200ms of wink before L; a shorter wink never presses. A tilt or turn that covers an eye is not a wink and does not press L.
+This uses the same look-axis / Space-hold / L-hold mapping as the preview, posted via `CGEventPost(kCGHIDEventTap)`. Live inject waits 200ms after mouth-open or an open palm is detected before Space key-down; a shorter gesture never presses. Pass waits the same 200ms of wink or two-fingers-up before L; a shorter gesture never presses. A tilt or turn that covers an eye is not a wink and does not press L. A hand clearly in the MacBook frame auto-swaps onto palm look-axis + hand gestures; otherwise face stays in control. No UI toggle. Switching releases the other source's keys. Face wink/mouth do not fire in hand mode; hand gestures do not fire in face mode.
 
 For a live control-label preview that does not send keyboard input:
 
@@ -97,6 +99,12 @@ It displays suggested labels only:
 - nose leaves the center deadzone up/down: `W` / `S`
 - mouth open: `Space`
 - left wink: `L`
+
+Live product (`python -m tracking.live`) also auto-swaps to MediaPipe Hands when a hand is clearly in frame (same 0.10.14 package, not OpenPose):
+
+- palm / middle-of-hand is the look-axis centre (same WASD deadzone as the nose)
+- two fingers up (index + middle): `L` after the same 200ms hold delay as wink
+- open palm: `Space` after the same 200ms hold delay as mouth-open
 
 Nose deadzone modes (live product, `python -m tracking.live`):
 

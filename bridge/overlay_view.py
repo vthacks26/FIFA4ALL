@@ -12,7 +12,9 @@ Stealing focus would stop the keys reaching the game, which is the failure this
 whole overlay exists to make visible.
 
 The geometry is drawn from the same control state the bridge publishes, so the
-overlay, the website, and the keys actually sent can never disagree.
+overlay, the website, and the keys actually sent can never disagree. Auto-swap
+labels the active source (Face / Hand) here; the website is a separate UI and
+does not get a source toggle.
 """
 
 from __future__ import annotations
@@ -73,8 +75,16 @@ def draw_overlay(cv2: Any, frame: Any, state: Mapping[str, object], thresholds: 
             )
 
     if nose is not None and tracking:
-        cv2.circle(view, nose, 9, (255, 255, 255), -1)
+        source = state.get("input_source") or "face"
+        fill = (255, 210, 60) if source == "hand" else (255, 255, 255)
+        cv2.circle(view, nose, 9, fill, -1)
         cv2.circle(view, nose, 9, (20, 20, 20), 2)
+        if source == "hand":
+            cv2.circle(view, nose, 16, (255, 210, 60), 2)
+            cv2.putText(
+                view, "PALM", (nose[0] + 14, nose[1] - 10),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 210, 60), 1, cv2.LINE_AA,
+            )
 
     _draw_status(cv2, view, state, width, height)
     _draw_reset(cv2, view, width)
@@ -191,14 +201,21 @@ def _draw_status(cv2: Any, view: Any, state: Mapping[str, object], width: int, h
         cv2.putText(
             view, "NO FACE", (12, 26), cv2.FONT_HERSHEY_SIMPLEX, 0.6, RED, 2, cv2.LINE_AA
         )
-    elif armed and state.get("game_focus") is False:
-        front = state.get("frontmost") or "another app"
-        cv2.putText(
-            view, f"FOCUS: {front}", (12, 26),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.55, AMBER, 2, cv2.LINE_AA,
-        )
     else:
-        cv2.putText(view, "FIFA4ALL", (12, 26), cv2.FONT_HERSHEY_SIMPLEX, 0.6, WHITE, 2, cv2.LINE_AA)
+        source = state.get("input_source") or "face"
+        source_label = "HAND" if source == "hand" else "FACE"
+        source_colour = (255, 210, 60) if source == "hand" else WHITE
+        if armed and state.get("game_focus") is False:
+            front = state.get("frontmost") or "another app"
+            cv2.putText(
+                view, f"{source_label}  FOCUS: {front}", (12, 26),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.55, AMBER, 2, cv2.LINE_AA,
+            )
+        else:
+            cv2.putText(
+                view, "FIFA4ALL" + f"  {source_label}", (12, 26),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, source_colour, 2, cv2.LINE_AA,
+            )
 
 
 def _point(value: object, width: int, height: int) -> tuple[int, int] | None:

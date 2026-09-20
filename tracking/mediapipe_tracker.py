@@ -25,6 +25,8 @@ class WebcamTrackingFrame:
     image: Any | None
     movement: MovementFrame
     landmarks: list[Any] | None = None
+    hand_landmarks: list[Any] | None = None
+    hand_score: float | None = None
 
 
 class WebcamFaceTracker:
@@ -49,6 +51,7 @@ class WebcamFaceTracker:
         self.extractor = FaceFeatureExtractor(config)
         self._cv2: Any | None = None
         self._face_mesh: Any | None = None
+        self._hands: Any | None = None
         self._landmarker: Any | None = None
         self._capture: Any | None = None
         self._mp: Any | None = None
@@ -74,6 +77,7 @@ class WebcamFaceTracker:
         self._mp = mp
         self._cv2 = cv2
         self._face_mesh = self._create_face_mesh(mp) if hasattr(mp, "solutions") else None
+        self._hands = self._create_hands(mp) if hasattr(mp, "solutions") else None
         if self._face_mesh is None:
             self._landmarker = self._create_landmarker(mp)
         chosen = resolve_mac_camera(
@@ -102,6 +106,9 @@ class WebcamFaceTracker:
         if self._face_mesh is not None:
             self._face_mesh.close()
             self._face_mesh = None
+        if self._hands is not None:
+            self._hands.close()
+            self._hands = None
         if self._landmarker is not None:
             self._landmarker.close()
             self._landmarker = None
@@ -126,16 +133,24 @@ class WebcamFaceTracker:
                 continue
 
             frame = self._resize(frame)
-            result = self._detect(frame)
+            rgb = self._cv2.cvtColor(frame, self._cv2.COLOR_BGR2RGB)
+            result = self._detect_rgb(rgb)
             landmarks = _result_landmarks(result)
+            hand_landmarks, hand_score = self._detect_hands_rgb(rgb)
             if landmarks is None:
                 self.extractor.reset()
-                yield WebcamTrackingFrame(frame, _invalid_frame("face_not_found"))
+                yield WebcamTrackingFrame(
+                    frame,
+                    _invalid_frame("face_not_found"),
+                    None,
+                    hand_landmarks,
+                    hand_score,
+                )
                 continue
 
             points = _mediapipe_points(landmarks)
             movement = self.extractor.from_named_points(points, timestamp_monotonic=monotonic())
-            yield WebcamTrackingFrame(frame, movement, landmarks)
+            yield WebcamTrackingFrame(frame, movement, landmarks, hand_landmarks, hand_score)
 
     def _read_fresh_frame(self) -> Any | None:
         """Read one fresh frame.
@@ -170,6 +185,35 @@ class WebcamFaceTracker:
             min_tracking_confidence=0.5,
         )
 
+    def _create_hands(self, mp: Any) -> Any | None:
+        """MediaPipe Hands on the same 0.10.14 solutions stack as Face Mesh."""
+
+        solutions = getattr(mp, "solutions", None)
+        hands_mod = getattr(solutions, "hands", None) if solutions is not None else None
+        if hands_mod is None:
+            return None
+        return hands_mod.Hands(
+            static_image_mode=False,
+            max_num_hands=1,
+            model_complexity=0,
+            min_detection_confidence=0.65,
+            min_tracking_confidence=0.5,
+        )
+
+    def _detect_hands_rgb(self, rgb: Any) -> tuple[list[Any] | None, float | None]:
+        if self._hands is None:
+            return (None, None)
+        result = self._hands.process(rgb)
+        landmarks_list = getattr(result, "multi_hand_landmarks", None)
+        if not landmarks_list:
+            return (None, None)
+        handedness = getattr(result, "multi_handedness", None)
+        score = None
+        if handedness:
+            classification = handedness[0].classification[0]
+            score = float(classification.score)
+        return (list(landmarks_list[0].landmark), score)
+
     def _create_landmarker(self, mp: Any) -> Any:
         if not self.model_path:
             raise RuntimeError(
@@ -184,11 +228,9 @@ class WebcamFaceTracker:
         )
         return mp.tasks.vision.FaceLandmarker.create_from_options(options)
 
-    def _detect(self, frame: Any) -> Any:
-        assert self._cv2 is not None
+    def _detect_rgb(self, rgb: Any) -> Any:
         assert self._mp is not None
 
-        rgb = self._cv2.cvtColor(frame, self._cv2.COLOR_BGR2RGB)
         if self._face_mesh is not None:
             return self._face_mesh.process(rgb)
 

@@ -1,8 +1,9 @@
-"""Live nose-joystick tracking → Quartz OS key holds.
+"""Live look-axis tracking → Quartz OS key holds.
 
-Uses the existing ``control_preview`` mapping (WASD / Space hold / wink L)
-and posts HID events the same way ``cursor/face-control-mvp-3874`` did.
-Does not import MediaPipe Tasks / FaceLandmarker.
+Uses the existing ``control_preview`` mapping (WASD / Space hold / wink or
+two-finger L) and posts HID events the same way ``cursor/face-control-mvp-3874``
+did. MediaPipe Hands auto-swaps with Face Mesh when a hand is clearly in
+frame. Does not import MediaPipe Tasks / FaceLandmarker.
 """
 
 from __future__ import annotations
