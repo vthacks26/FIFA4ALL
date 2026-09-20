@@ -552,6 +552,9 @@ class OverlayStaysSeparateTests(unittest.TestCase):
         self.assertIn("follow_axes", overlay)
         self.assertIn('"NO FACE"', overlay)
         self.assertIn('"FIFA4ALL"', overlay)
+        self.assertIn('"FACE"', overlay)
+        self.assertIn('"HAND"', overlay)
+        self.assertIn('"PALM"', overlay)
 
 
 class OverlayDeadzoneSwitchTests(unittest.TestCase):
