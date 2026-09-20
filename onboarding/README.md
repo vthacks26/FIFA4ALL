@@ -157,8 +157,9 @@ nose holds still outside the dead zone for 3.5 seconds that is treated as
 drift, so neutral is re-set there and the HUD confirms it.
 
 **Follow** skips that timer. A held look (for example D) stays in that
-direction; recenter only from eyebrows, overlay RESET, or website Find your
-center / Reset center.
+direction. Recentre from overlay RESET or website Find your center /
+Reset center. Eyebrow-raise recenter is temporarily disabled
+(`EYEBROW_RECENTRE` in `tracking/controls.py`; set True to restore).
 
 ### Nose deadzone
 
@@ -176,6 +177,7 @@ The live website HUD still has a **Deadzone** switch (persisted in
   beyond the WASD chips; the zone only follows when the nose is in that outer
   region (center slides so the nose stays on the ring). Between the rings the
   current direction stays held, so a small move back from the outer edge still
-  moves. A held look does not auto-recentre. Recentre only from eyebrows,
-  Find your center, Reset center, or overlay RESET. The live HUD camera is a
-  large color face feed; the OpenCV look-axis window stays separate.
+  moves. A held look does not auto-recentre. Recentre from Find your center,
+  Reset center, or overlay RESET. Eyebrow-raise recenter is temporarily
+  disabled. The live HUD camera is a large color face feed; the OpenCV
+  look-axis window stays separate.

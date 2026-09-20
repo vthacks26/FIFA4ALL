@@ -22,6 +22,12 @@ DeadzoneMode = Literal["fixed", "follow"]
 DEADZONE_MODES: tuple[DeadzoneMode, ...] = ("fixed", "follow")
 
 
+# TEMPORARY: eyebrow-raise must not call ControlStateMachine.calibrate.
+# Brecken is confirming Follow recenter is not a false brow trigger.
+# Flip to True to restore eyebrow-raise → recenter (same as overlay RESET).
+EYEBROW_RECENTRE = False
+
+
 def parse_deadzone_mode(value: object) -> DeadzoneMode:
     """Accept only the two published nose-deadzone modes."""
 
@@ -256,6 +262,8 @@ class ControlStateMachine:
     # Follow mode may drag `center` away; calibrate and mode-switch snap back.
     home: tuple[float, float] | None = None
     deadzone_mode: DeadzoneMode = "fixed"
+    # Defaults to the module flag so one flip restores gesture recenter.
+    eyebrow_recentre: bool = EYEBROW_RECENTRE
     mouth_rest: float | None = None
     eye_rest: float | None = None
     brow_rest: float | None = None
@@ -450,16 +458,21 @@ class ControlStateMachine:
             # rest, not a raise, so do not fire on this frame.
             self.brow_rest = brow_value
             self._apply_brow_thresholds()
-        _, brow_fired = self._brow.update(
-            None if self.brow_rest is None else brow_value, moment
-        )
-        if brow_fired:
-            # Same pose reset as overlay RESET / POST /calibrate, but do not
-            # sample mouth_rest or brow_rest: the brows are raised.
-            # Calibrate also restores home, so follow-mode drag is cleared.
-            self.calibrate(nose)
-            offset = (0.0, 0.0)
-            self._update_movement(offset)
+        brow_fired = False
+        if self.eyebrow_recentre:
+            _, brow_fired = self._brow.update(
+                None if self.brow_rest is None else brow_value, moment
+            )
+            if brow_fired:
+                # Same pose reset as overlay RESET / POST /calibrate, but do not
+                # sample mouth_rest or brow_rest: the brows are raised.
+                # Calibrate also restores home, so follow-mode drag is cleared.
+                self.calibrate(nose)
+                offset = (0.0, 0.0)
+                self._update_movement(offset)
+        else:
+            # Disabled: never latch or calibrate from a brow-to-eyelid reading.
+            self._brow.update(None, moment)
         mouth_value = features.get("mouth_opening")
         _, mouth_fired = self._mouth.update(mouth_value, moment)
         _, wink_fired = self._wink.update(wink_value, moment)

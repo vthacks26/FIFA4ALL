@@ -81,7 +81,7 @@ You do not need to recreate `.venv` or reinstall unless you deleted it.
 1. Grant Camera and Accessibility, then start `--preview` (orientation) or `--no-preview` (match, Luna already focused).
 2. Open **Google Chrome** → Amazon Luna → EA Sports FC (simplified keyboard layout).
 3. **Click the game** so Chrome / Luna is focused. OS keys go to the frontmost app.
-4. Sit straight. Recentre by **raising your eyebrows**, from the site (**Find your center**, **Reset center**), or by tapping **RESET** on the look-axis overlay. Eyebrow raise, site calibrate, and overlay RESET all call the same `ControlStateMachine.calibrate` on this process — they apply to play. A held raise does not repeat the reset; opening your mouth to shoot does not reset. Keep the process running when you switch from the site to the match.
+4. Sit straight. Recentre from the site (**Find your center**, **Reset center**) or by tapping **RESET** on the look-axis overlay. **Eyebrow-raise recenter is temporarily disabled** (`EYEBROW_RECENTRE = False` in `tracking/controls.py`) so a look cannot be mistaken for a brow reset. Flip that flag to True to restore it. Keep the process running when you switch from the site to the match.
 5. Look, open your mouth, or wink. Holds stay down until you return to center / close your mouth / stop winking.
 
 | Gesture | Key (held) | In-game (simplified FC) |
@@ -89,7 +89,7 @@ You do not need to recreate `.venv` or reinstall unless you deleted it.
 | Nose / head look axis (leave the center deadzone) | `W` `A` `S` `D` | Move |
 | Mouth open | `Space` | Shoot (Space after the mouth stays open 200ms; hold while it stays open) |
 | Wink (either eye; blinks rejected) | `L` | Pass (hold while the wink is detected) |
-| Raised eyebrows | — | Recentre / recalibrate pose (same as overlay RESET and `POST /calibrate`) |
+| Raised eyebrows | — | Temporarily disabled (does not recenter). Use overlay **RESET** or website **Find your center** / **Reset center**. |
 
 The first valid nose point after start or Reset is the joystick center. Combinations are allowed (for example look + shoot).
 
@@ -99,8 +99,8 @@ WASD uses a nose deadzone. Two modes are available; **fixed center is the defaul
 
 | Mode | Behaviour | How to stop |
 | --- | --- | --- |
-| **Fixed center** (default) | The deadzone stays around the last calibrated center (start, eyebrows, **Find your center**, **Reset center**, overlay **RESET**). | Return into that original zone to release WASD. |
-| **Follow** | Two radii. The inner deadzone still releases WASD. An **outer ring** sits beyond the WASD chips. The interface / deadzone center is pulled only when the nose is in that outer region (the center slides so the nose stays on the outer circle). Between the inner deadzone and the outer ring, the current WASD direction stays held. A held look does **not** auto-recentre after a few seconds. | Return into the inner deadzone. A small move back from the outer edge still moves the character. Recentre only with eyebrows, overlay **RESET**, or website **Find your center** / **Reset center**. |
+| **Fixed center** (default) | The deadzone stays around the last calibrated center (start, **Find your center**, **Reset center**, overlay **RESET**). | Return into that original zone to release WASD. |
+| **Follow** | Two radii. The inner deadzone still releases WASD. An **outer ring** sits beyond the WASD chips. The interface / deadzone center is pulled only when the nose is in that outer region (the center slides so the nose stays on the outer circle). Between the inner deadzone and the outer ring, the current WASD direction stays held. A held look does **not** auto-recentre after a few seconds. | Return into the inner deadzone. A small move back from the outer edge still moves the character. Recentre with overlay **RESET** or website **Find your center** / **Reset center**. Eyebrow recenter is temporarily off. |
 
 Switch at runtime from the look-axis overlay (`FIFA4ALL look axis`): tap **FIXED** or **FOLLOW** under **RESET**. That click changes `ControlStateMachine` on this process immediately, so the WASD keys Quartz is already injecting use the new deadzone. Recentre / calibrate still resets the center as today.
 
@@ -128,5 +128,5 @@ More tracking notes: [`tracking/README.md`](tracking/README.md). Orientation scr
 
 - **Shooting** waits 200ms after mouth-open is detected (open/reset hysteresis still applies) before holding Space, so FIFA's charge does not start on a brief open. If the mouth closes before 200ms, Space is never pressed. After Space is down, a longer open is a more powerful shot. Calibration samples the resting mouth, because a mouth at rest does not read zero and a fixed threshold can latch Space open permanently.
 - **Passing** accepts either eye. A blink is rejected by requiring the other eye to stay open.
-- **Recentre** by raising your eyebrows (or overlay **RESET** / website **Find your center**). Detection is the brow-to-eyelid gap above the resting value sampled on the first valid face and again on click-calibrate, so a normal open mouth used for shoot does not reset. The trigger is edge-latched: a held raise fires once until you lower your brows. In **follow** mode those explicit actions are the only recenter: a held look does not snap the home center onto the current face.
+- **Recentre** with overlay **RESET** or website **Find your center** / **Reset center**. **Eyebrow-raise recenter is temporarily disabled** (set `EYEBROW_RECENTRE` in `tracking/controls.py` to True to restore the brow-to-eyelid path). In **follow** mode a held look still does not snap the home center onto the current face.
 - **Movement** releases every key when tracking is lost, so a lost face cannot leave the player running. In **fixed** deadzone mode, WASD releases when the nose returns to the calibrated center zone. In **follow** mode, an outer ring beyond the WASD chips is the only place that drags the zone; between that ring and the inner deadzone the current direction stays held. Switch **FIXED / FOLLOW** on the look-axis overlay; default is fixed. The website live HUD shows the same two rings on a larger color camera feed (the OpenCV look-axis window stays a separate overlay).

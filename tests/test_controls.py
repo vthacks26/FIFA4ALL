@@ -8,6 +8,7 @@ from tracking.bindings import CHANNELS, default_bindings
 from tracking.controls import (
     CARDINALS,
     DIRECTION_KEYS,
+    EYEBROW_RECENTRE,
     LEGACY_CHANNEL_KEYS,
     ControlStateMachine,
     ControlThresholds,
@@ -572,11 +573,35 @@ class EyebrowResetTests(unittest.TestCase):
 
     def with_rest(self) -> ControlStateMachine:
         state = machine()
+        # Existing raise→calibrate cases opt into the restore flag.
+        state.eyebrow_recentre = True
         state.update(
             nose=CENTER, features={**NEUTRAL, "eyebrow_raise": self.REST},
             tracking_valid=True, now=-1.0,
         )
         return state
+
+    def test_eyebrow_recentre_is_off_by_default(self) -> None:
+        """Temporary: a raise must not call calibrate until the flag is on."""
+
+        self.assertFalse(EYEBROW_RECENTRE)
+        state = machine()
+        self.assertFalse(state.eyebrow_recentre)
+        state.update(
+            nose=CENTER, features={**NEUTRAL, "eyebrow_raise": self.REST},
+            tracking_valid=True, now=-1.0,
+        )
+        drifted = at(0.12, 0.0)
+        state.update(
+            nose=drifted, features={**NEUTRAL, "eyebrow_raise": self.REST},
+            tracking_valid=True, now=0.0,
+        )
+        result = state.update(nose=drifted, features=self.RAISE, tracking_valid=True, now=0.1)
+        self.assertFalse(result["eyebrow"]["fired"])
+        self.assertFalse(result["centered"])
+        self.assertEqual(result["keys"], ["D"])
+        self.assertEqual(state.center, CENTER)
+        self.assertEqual(state.home, CENTER)
 
     def test_open_mouth_does_not_recalibrate(self) -> None:
         state = self.with_rest()
@@ -853,8 +878,23 @@ class FollowDeadzoneTests(unittest.TestCase):
         self.assertEqual(state.center, self.FAR_EAST)
         self.assertEqual(state.home, self.FAR_EAST)
 
+    def test_eyebrow_raise_does_not_recenter_while_disabled(self) -> None:
+        state = self.follow_machine()
+        rest = {**NEUTRAL, "eyebrow_raise": 0.10}
+        state.update(nose=CENTER, features=rest, tracking_valid=True, now=-1.0)
+        moving = state.update(nose=self.FAR_EAST, features=rest, tracking_valid=True, now=0.0)
+        self.assertEqual(moving["keys"], ["D"])
+        dragged = state.center
+        raised = {**NEUTRAL, "eyebrow_raise": 0.14}
+        result = state.update(nose=self.FAR_EAST, features=raised, tracking_valid=True, now=0.1)
+        self.assertFalse(result["eyebrow"]["fired"])
+        self.assertEqual(result["keys"], ["D"])
+        self.assertEqual(state.center, dragged)
+        self.assertEqual(state.home, CENTER)
+
     def test_eyebrow_reset_clears_follow_drag(self) -> None:
         state = self.follow_machine()
+        state.eyebrow_recentre = True
         rest = {**NEUTRAL, "eyebrow_raise": 0.10}
         state.update(nose=CENTER, features=rest, tracking_valid=True, now=-1.0)
         state.update(nose=self.FAR_EAST, features=rest, tracking_valid=True, now=0.0)
