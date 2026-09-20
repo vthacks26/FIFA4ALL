@@ -120,7 +120,7 @@ output layer turns control state into real key events.
 | --- | --- | --- |
 | Head direction | W A S D | held while the direction is active; released at the (fixed or followed) deadzone |
 | Mouth open | Space | Space after 200ms open; held while open, so longer open is a more powerful shot |
-| Wink | L | single tap; an eye held closed never repeats |
+| Wink | L | L after 200ms of wink, same as shoot; held while the wink stays detected |
 
 ### Before a match
 

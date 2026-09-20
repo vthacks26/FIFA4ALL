@@ -21,6 +21,7 @@ from tracking.bindings import ACTIONS, default_bindings
 from output.session import (
     MOVEMENT_KEYS,
     PASS_KEY,
+    PASS_PRESS_DELAY_SECONDS,
     SHOOT_KEY,
     SHOOT_PRESS_DELAY_SECONDS,
     InputSession,
@@ -56,6 +57,15 @@ def confirm_mouth(session: InputSession, start: float = 0.0) -> float:
     session.apply(state(mouth=True), now=start)
     down_at = start + SHOOT_PRESS_DELAY_SECONDS
     session.apply(state(mouth=True), now=down_at)
+    return down_at
+
+
+def confirm_wink(session: InputSession, start: float = 0.0) -> float:
+    """Keep the wink detected through the 200ms L delay. Returns key-down time."""
+
+    session.apply(state(wink=True), now=start)
+    down_at = start + PASS_PRESS_DELAY_SECONDS
+    session.apply(state(wink=True), now=down_at)
     return down_at
 
 
@@ -238,27 +248,54 @@ class ShootTests(unittest.TestCase):
 
 
 class PassTests(unittest.TestCase):
-    def test_wink_holds_the_pass_key(self) -> None:
-        session, keyboard = armed()
-        session.apply(state(wink=True), now=0.0)
-        self.assertEqual(keyboard.events, [("down", "L")])
-        self.assertEqual(session.held_keys, frozenset({"L"}))
+    def test_pass_uses_the_same_press_delay_as_shoot(self) -> None:
+        self.assertEqual(PASS_PRESS_DELAY_SECONDS, SHOOT_PRESS_DELAY_SECONDS)
+        self.assertEqual(PASS_PRESS_DELAY_SECONDS, 0.2)
 
-    def test_holding_the_wink_does_not_repeat_the_press(self) -> None:
+    def test_wink_does_not_press_l_immediately(self) -> None:
         session, keyboard = armed()
         session.apply(state(wink=True), now=0.0)
-        keyboard.reset()
-        session.apply(state(wink=True), now=0.2)
         self.assertEqual(keyboard.events, [])
-        self.assertEqual(session.held_keys, frozenset({"L"}))
+        self.assertNotIn(PASS_KEY, session.held_keys)
+
+    def test_releasing_before_the_delay_never_presses_l(self) -> None:
+        session, keyboard = armed()
+        session.apply(state(wink=True), now=0.0)
+        session.apply(state(wink=False), now=PASS_PRESS_DELAY_SECONDS - 0.001)
+        self.assertEqual(keyboard.events, [])
+        self.assertEqual(session.held_keys, frozenset())
+
+    def test_l_goes_down_after_the_wink_stays_detected(self) -> None:
+        session, keyboard = armed()
+        confirm_wink(session)
+        self.assertEqual(keyboard.events, [("down", "L")])
+
+    def test_l_stays_down_while_the_wink_is_held(self) -> None:
+        session, keyboard = armed()
+        down_at = confirm_wink(session)
+        keyboard.reset()
+        session.apply(state(wink=True), now=down_at + 0.3)
+        self.assertEqual(keyboard.events, [])
+        self.assertIn(PASS_KEY, session.held_keys)
 
     def test_releasing_the_wink_releases_l(self) -> None:
         session, keyboard = armed()
-        session.apply(state(wink=True), now=0.0)
+        down_at = confirm_wink(session)
         keyboard.reset()
-        session.apply(state(wink=False), now=0.2)
+        session.apply(state(wink=False), now=down_at + 0.2)
         self.assertEqual(keyboard.events, [("up", "L")])
         self.assertEqual(session.held_keys, frozenset())
+
+    def test_a_new_wink_restarts_the_delay(self) -> None:
+        session, keyboard = armed()
+        session.apply(state(wink=True), now=0.0)
+        session.apply(state(wink=False), now=0.15)
+        reopen = 0.16
+        session.apply(state(wink=True), now=reopen)
+        session.apply(state(wink=True), now=reopen + PASS_PRESS_DELAY_SECONDS - 0.01)
+        self.assertEqual(keyboard.events, [])
+        session.apply(state(wink=True), now=reopen + PASS_PRESS_DELAY_SECONDS)
+        self.assertEqual(keyboard.events, [("down", "L")])
 
 
 class SafetyTests(unittest.TestCase):
@@ -327,8 +364,9 @@ class BindingDrivenOutputTests(unittest.TestCase):
 
     def test_generic_channel_view_drives_pass_without_the_legacy_key(self) -> None:
         session, keyboard = armed()
-        # Pass is a hold, so it reads `active`, not the rising edge.
+        # Pass has a 200ms press delay, so one frame is not yet a press.
         session.apply(bound_state(channel="wink", active=True), now=0.0)
+        session.apply(bound_state(channel="wink", active=True), now=0.25)
         self.assertIn(PASS_KEY, keyboard.held)
 
     def test_rebound_shoot_holds_space_from_its_new_channel(self) -> None:
@@ -373,10 +411,11 @@ class BindingDrivenOutputTests(unittest.TestCase):
 
         session, keyboard = armed()
         session.apply(state(mouth=True, wink=True), now=0.0)
-        # Pass has no press delay and is held from the first frame; shoot
-        # needs its 200ms before Space goes down.
-        self.assertIn(PASS_KEY, keyboard.held)
+        # Both actions wait 200ms before their key goes down.
+        self.assertNotIn(PASS_KEY, keyboard.held)
+        self.assertNotIn(SHOOT_KEY, keyboard.held)
         session.apply(state(mouth=True, wink=True), now=0.25)
+        self.assertIn(PASS_KEY, keyboard.held)
         self.assertIn(SHOOT_KEY, keyboard.held)
 
 

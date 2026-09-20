@@ -9,8 +9,10 @@ Semantics, decided from how EA Sports FC actually reads input:
   the gesture has been held for the action's press delay, 200ms for shoot; a
   shorter gesture never presses. After that, FIFA's own charge curve runs —
   no pulsing or extra slowing.
-- Passing is a hold. Its gesture holds L until the gesture ends, with no
-  press delay.
+- Passing is a hold. Its gesture holds L until the gesture ends. L goes down
+  only after the wink has been held for the action's press delay, 200ms,
+  matching shoot; a shorter wink never presses. After that, FIFA's own pass
+  power runs from key-down — no pulsing or extra slowing.
 
 Which gesture drives which action is not decided here. This module reads the
 action table in `tracking.bindings` for the key, the hold-vs-tap rule and the
@@ -46,6 +48,7 @@ TAP_SECONDS = 0.06
 SHOOT_KEY = ACTIONS["SHOOT"].key
 PASS_KEY = ACTIONS["PASS"].key
 SHOOT_PRESS_DELAY_SECONDS = ACTIONS["SHOOT"].press_delay_seconds
+PASS_PRESS_DELAY_SECONDS = ACTIONS["PASS"].press_delay_seconds
 
 
 @dataclass

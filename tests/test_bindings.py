@@ -25,6 +25,10 @@ class DefaultBindingTests(unittest.TestCase):
         self.assertEqual(ACTIONS["SHOOT"].trigger, "hold")
         self.assertEqual(ACTIONS["PASS"].trigger, "hold")
 
+    def test_pass_and_shoot_share_the_same_press_delay(self) -> None:
+        self.assertEqual(ACTIONS["SHOOT"].press_delay_seconds, 0.2)
+        self.assertEqual(ACTIONS["PASS"].press_delay_seconds, 0.2)
+
     def test_default_channels_match_shipped_thresholds(self) -> None:
         self.assertEqual(CHANNELS["mouth_open"].default_on, 0.090)
         self.assertEqual(CHANNELS["mouth_open"].default_off, 0.060)

@@ -83,7 +83,7 @@ Headless inject (same UI server, no overlay, no browser — keeps Luna focused):
 MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --no-preview
 ```
 
-This uses the same nose-joystick / mouth-Space-hold / wink-L mapping as the preview, posted via `CGEventPost(kCGHIDEventTap)`. Live inject waits 200ms after mouth-open is detected before Space key-down; a shorter open never presses. Wink / L is unchanged.
+This uses the same nose-joystick / mouth-Space-hold / wink-L mapping as the preview, posted via `CGEventPost(kCGHIDEventTap)`. Live inject waits 200ms after mouth-open is detected before Space key-down; a shorter open never presses. Pass waits the same 200ms of wink before L; a shorter wink never presses.
 
 For a live control-label preview that does not send keyboard input:
 
