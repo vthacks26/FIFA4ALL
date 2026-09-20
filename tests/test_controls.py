@@ -35,6 +35,10 @@ class ThresholdValidationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             ControlThresholds(enter_radius=0.05, exit_radius=0.05)
 
+    def test_follow_radius_must_exceed_exit_radius(self) -> None:
+        with self.assertRaises(ValueError):
+            ControlThresholds(exit_radius=0.08, follow_radius=0.08)
+
     def test_mouth_reset_must_be_below_open(self) -> None:
         with self.assertRaises(ValueError):
             ControlThresholds(mouth_open=0.09, mouth_reset=0.09)
@@ -545,6 +549,7 @@ class StateContractTests(unittest.TestCase):
     def test_thresholds_are_publishable_to_the_ui(self) -> None:
         published = ControlThresholds().as_dict()
         self.assertEqual(published["enter_radius"], ControlThresholds().enter_radius)
+        self.assertEqual(published["follow_radius"], ControlThresholds().follow_radius)
         self.assertIn("mouth_open", published)
         self.assertIn("brow_on", published)
         self.assertIn("brow_off", published)
@@ -733,9 +738,10 @@ class ChannelViewTests(unittest.TestCase):
 
 
 class FollowDeadzoneTests(unittest.TestCase):
-    """Trailing deadzone: further look pulls the zone; a short opposite move stops."""
+    """Two-radius follow: outer ring drags; the band inside it holds WASD."""
 
-    FAR_EAST = at(0.20, 0.0)
+    # Beyond follow_radius (0.170) so the first update must slide the center.
+    FAR_EAST = at(0.28, 0.0)
 
     def follow_machine(self) -> ControlStateMachine:
         state = machine()
@@ -761,35 +767,56 @@ class FollowDeadzoneTests(unittest.TestCase):
         self.assertEqual(result["keys"], ["D"])
         self.assertFalse(result["centered"])
 
-    def test_follow_mode_releases_after_a_small_opposite_move(self) -> None:
+    def test_follow_does_not_drag_inside_the_outer_ring(self) -> None:
+        state = self.follow_machine()
+        # Past the deadzone, short of the outer follow ring.
+        mid = at(0.12, 0.0)
+        result = state.update(nose=mid, features=NEUTRAL, tracking_valid=True)
+        self.assertEqual(result["keys"], ["D"])
+        self.assertEqual(state.center, CENTER)
+        self.assertAlmostEqual(result["nose"]["x"], 0.12, places=3)
+
+    def test_follow_holds_wasd_after_a_small_move_back_from_the_outer_ring(self) -> None:
         state = self.follow_machine()
         moving = state.update(nose=self.FAR_EAST, features=NEUTRAL, tracking_valid=True)
         self.assertEqual(moving["keys"], ["D"])
         self.assertFalse(moving["centered"])
+        self.assertNotEqual(state.center, CENTER)
+        self.assertEqual(state.home, CENTER)
 
-        # A short move back toward center, not all the way to calibrate home.
-        slight_back = at(0.20 - 0.03, 0.0)
+        # Still between the inner deadzone and the outer ring.
+        slight_back = at(0.28 - 0.04, 0.0)
         result = state.update(nose=slight_back, features=NEUTRAL, tracking_valid=True)
+        self.assertEqual(result["keys"], ["D"])
+        self.assertFalse(result["centered"])
+
+    def test_follow_releases_only_inside_the_inner_deadzone(self) -> None:
+        state = self.follow_machine()
+        state.update(nose=self.FAR_EAST, features=NEUTRAL, tracking_valid=True)
+        # After drag, center sits follow_radius behind the nose.
+        inside = (
+            state.center[0] + 0.02,
+            state.center[1],
+        )
+        result = state.update(nose=inside, features=NEUTRAL, tracking_valid=True)
         self.assertEqual(result["keys"], [])
         self.assertTrue(result["centered"])
-        self.assertNotEqual(state.center, CENTER)
         self.assertEqual(state.home, CENTER)
 
     def test_same_small_move_does_not_release_in_fixed_mode(self) -> None:
         state = machine()
         state.update(nose=self.FAR_EAST, features=NEUTRAL, tracking_valid=True)
-        slight_back = at(0.20 - 0.03, 0.0)
+        slight_back = at(0.28 - 0.04, 0.0)
         result = state.update(nose=slight_back, features=NEUTRAL, tracking_valid=True)
         self.assertEqual(result["keys"], ["D"])
         self.assertFalse(result["centered"])
 
-    def test_follow_still_moves_while_just_outside_the_pulled_zone(self) -> None:
+    def test_follow_pins_the_nose_to_the_outer_circle(self) -> None:
         state = self.follow_machine()
         state.update(nose=self.FAR_EAST, features=NEUTRAL, tracking_valid=True)
-        # Stay at the far point: the pulled zone sits just behind the nose.
         held = state.update(nose=self.FAR_EAST, features=NEUTRAL, tracking_valid=True)
         self.assertEqual(held["keys"], ["D"])
-        self.assertAlmostEqual(held["nose"]["x"], state.thresholds.exit_radius, places=3)
+        self.assertAlmostEqual(held["nose"]["x"], state.thresholds.follow_radius, places=3)
 
     def test_calibrate_resets_a_followed_deadzone_to_the_new_home(self) -> None:
         state = self.follow_machine()
@@ -822,7 +849,7 @@ class FollowDeadzoneTests(unittest.TestCase):
         result = state.update(nose=self.FAR_EAST, features=NEUTRAL, tracking_valid=True)
         self.assertEqual(result["keys"], ["D"])
         # Still need to return to the original calibrated zone.
-        slight_back = at(0.20 - 0.03, 0.0)
+        slight_back = at(0.28 - 0.04, 0.0)
         still = state.update(nose=slight_back, features=NEUTRAL, tracking_valid=True)
         self.assertEqual(still["keys"], ["D"])
 

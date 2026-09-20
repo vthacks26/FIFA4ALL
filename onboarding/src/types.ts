@@ -52,6 +52,8 @@ export interface ControlState {
 export interface Thresholds {
   readonly enter_radius: number;
   readonly exit_radius: number;
+  /** Follow-mode outer ring. Absent in older payloads. */
+  readonly follow_radius?: number;
   readonly y_scale: number;
   readonly angle_margin: number;
   readonly recentre_seconds: number;
@@ -116,6 +118,7 @@ export const IDLE_STATE: ControlState = {
 export const DEFAULT_THRESHOLDS: Thresholds = {
   enter_radius: 0.045,
   exit_radius: 0.062,
+  follow_radius: 0.170,
   y_scale: 1.15,
   angle_margin: 9.0,
   recentre_seconds: 3.5,

@@ -64,7 +64,7 @@ export function Center({ channel, onNext }: CenterProps) {
           state={state}
           thresholds={config.thresholds}
           hasVideo={config.has_video}
-          size={368}
+          size={500}
           lockProgress={locked ? 1 : progress}
           locked={locked}
           showKeys={false}

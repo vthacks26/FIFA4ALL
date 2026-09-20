@@ -101,7 +101,7 @@ It displays suggested labels only:
 Nose deadzone modes (live product, `python -m tracking.live`):
 
 - **fixed** (default): the zone stays on the last calibrated center. Return into that original zone to release WASD.
-- **follow**: once the nose is just outside, further look pulls the zone along. A small opposite move back into the pulled zone stops you.
+- **follow**: an outer ring beyond the WASD chips is the only place that drags the zone (nose stays on that circle). Between that ring and the inner deadzone, WASD stays held — a small move back from the outer edge still moves. Return into the inner deadzone to stop.
 
 Switch **FIXED / FOLLOW** on the look-axis overlay (`FIFA4ALL look axis`, under RESET). That click changes the live `ControlStateMachine` used for Quartz WASD. Or start with `--deadzone-mode follow`. The website toggle still POSTs through if the tab is open. Eyebrow raise, site calibrate, and overlay RESET still recapture the center.
 

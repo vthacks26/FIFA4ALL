@@ -59,12 +59,15 @@ export function Reticle({
   const { width, height, anchorX, anchorY, ballX, ballY, scaleX, scaleY } = mapping;
   const neutral = thresholds.exit_radius;
   const inner = thresholds.enter_radius;
-  const outer = neutral * 2.9;
+  // Outer follow ring sits beyond the WASD chips and the inner deadzone.
+  const follow = thresholds.follow_radius ?? neutral * 2.75;
+  const outer = Math.max(follow, neutral * 2.2);
   const circumference = 2 * Math.PI * neutral;
   const moving = state.direction !== null;
+  const following = state.deadzone_mode === "follow";
 
-  // Label offsets use each axis separately so they hug the real ellipse.
-  const labelRadius = outer * 0.82;
+  // WASD sits inside the outer follow circle.
+  const labelRadius = follow * 0.82;
 
   return (
     <>
@@ -79,10 +82,10 @@ export function Reticle({
         viewBox={`0 0 ${width} ${height}`}
       >
         <g transform={`translate(${anchorX} ${anchorY}) scale(${scaleX} ${scaleY})`}>
-          <circle className="reticle__radar" r={outer} />
           <circle className="reticle__radar" r={outer * 0.66} />
-          <line className="reticle__cross" x1={-outer} y1={0} x2={outer} y2={0} />
-          <line className="reticle__cross" x1={0} y1={-outer} x2={0} y2={outer} />
+          <circle className={`reticle__follow ${following ? "is-active" : ""}`} r={follow} />
+          <line className="reticle__cross" x1={-follow} y1={0} x2={follow} y2={0} />
+          <line className="reticle__cross" x1={0} y1={-follow} x2={0} y2={follow} />
 
           {[45, 135, 225, 315].map((angle) => {
             const radians = (angle * Math.PI) / 180;
@@ -92,8 +95,8 @@ export function Reticle({
                 className="reticle__divider"
                 x1={Math.cos(radians) * neutral}
                 y1={Math.sin(radians) * neutral}
-                x2={Math.cos(radians) * outer}
-                y2={Math.sin(radians) * outer}
+                x2={Math.cos(radians) * follow}
+                y2={Math.sin(radians) * follow}
               />
             );
           })}
@@ -112,7 +115,7 @@ export function Reticle({
           )}
 
           {state.direction !== null && (
-            <path className="reticle__wedge" d={wedgePath(state.direction, neutral, outer)} />
+            <path className="reticle__wedge" d={wedgePath(state.direction, neutral, follow)} />
           )}
         </g>
       </svg>

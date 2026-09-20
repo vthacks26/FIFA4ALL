@@ -31,6 +31,17 @@
   stroke-dasharray: 4 6;
 }
 
+.reticle__follow {
+  fill: none;
+  stroke: rgba(180, 205, 235, 0.7);
+  stroke-width: 2;
+}
+
+.reticle__follow.is-active {
+  stroke: var(--lime);
+  stroke-width: 2.4;
+}
+
 .reticle__inner {
   fill: none;
   stroke: rgba(155, 255, 60, 0.55);

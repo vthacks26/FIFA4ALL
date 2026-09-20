@@ -31,10 +31,12 @@ MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --preview
 That waits until the UI is listening, then opens **http://127.0.0.1:8765/**
 (Welcome → practice → live HUD). On macOS that is `/usr/bin/open` on that
 URL (`webbrowser.open` often no-ops). If open fails, the log prints the URL
-to click. Drag that window to the second monitor. The native look-axis
-overlay stays a **separate** camera/vision window — website chrome is not
-drawn there. Same MacBook camera and Quartz holds. Do not start
-`npm run dev` and do not start a second camera.
+to click. Drag that window to the second monitor. The live HUD camera is a
+large **color** MJPEG face feed (not grayscale) with the inner deadzone and
+outer follow ring. The native look-axis overlay stays a **separate**
+camera/vision window — website chrome is not drawn there. Same MacBook
+camera and Quartz holds. Do not start `npm run dev` and do not start a
+second camera.
 
 `--no-preview` still serves the same URL (inject + UI server) but does **not**
 open a browser, so Luna can keep keyboard focus. Open the URL yourself only
@@ -168,6 +170,10 @@ The live website HUD still has a **Deadzone** switch (persisted in
 
 - **Fixed center** (default): the zone stays on the last calibrate / RESET home.
   Return into that original zone to release WASD.
-- **Follow**: once the nose is just outside, further look pulls the zone. A
-  small opposite move stops you. Recentre (eyebrows, Find your center, Reset
-  center, overlay RESET) still resets the home as today.
+- **Follow**: two radii. The inner deadzone releases WASD. An outer ring sits
+  beyond the WASD chips; the zone only follows when the nose is in that outer
+  region (center slides so the nose stays on the ring). Between the rings the
+  current direction stays held, so a small move back from the outer edge still
+  moves. Recentre (eyebrows, Find your center, Reset center, overlay RESET)
+  still resets the home as today. The live HUD camera is a large color face
+  feed; the OpenCV look-axis window stays separate.
