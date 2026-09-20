@@ -68,10 +68,10 @@ http://127.0.0.1:8765/ (Welcome / practice / live HUD) with macOS
 `/usr/bin/open` and a **separate** Face + WASD look-axis overlay
 (camera/vision only; non-activating). If the browser does not appear, the
 log prints that URL to click. Recentre from the website
-(**Find your center** / **Reset center**), the overlay **Reset**, or by
-**raising your eyebrows** — all three drive the same
-`ControlStateMachine.calibrate` on the live injector. A held raise does
-not fire repeatedly; opening your mouth to shoot does not reset.
+(**Find your center** / **Reset center**) or the overlay **RESET**.
+Eyebrow-raise recenter is temporarily disabled (`EYEBROW_RECENTRE = False`
+in `tracking/controls.py`; set True to restore). Overlay RESET and site
+calibrate still drive `ControlStateMachine.calibrate` on the live injector.
 
 ```bash
 MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --preview
@@ -101,7 +101,7 @@ It displays suggested labels only:
 Nose deadzone modes (live product, `python -m tracking.live`):
 
 - **fixed** (default): the zone stays on the last calibrated center. Return into that original zone to release WASD.
-- **follow**: an outer ring beyond the WASD chips is the only place that drags the zone (nose stays on that circle). Between that ring and the inner deadzone, WASD stays held — a small move back from the outer edge still moves. Return into the inner deadzone to stop. A held look does not auto-recentre; only eyebrows, overlay RESET, or site calibrate recapture the center.
+- **follow**: an outer ring beyond the WASD chips is the only place that drags the zone (nose stays on that circle). Between that ring and the inner deadzone, WASD stays held — a small move back from the outer edge still moves. Return into the inner deadzone to stop. A held look does not auto-recentre. Overlay RESET or site calibrate recapture the center. Eyebrow recenter is temporarily off.
 
 Switch **FIXED / FOLLOW** on the look-axis overlay (`FIFA4ALL look axis`, under RESET). That click changes the live `ControlStateMachine` used for Quartz WASD. Or start with `--deadzone-mode follow`. The website toggle still POSTs through if the tab is open. Eyebrow raise, site calibrate, and overlay RESET still recapture the center.
 
