@@ -18,6 +18,16 @@ from typing import Literal, Mapping
 from tracking.bindings import CHANNELS, BindingMap, GestureChannel, default_bindings
 
 Direction = Literal["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+DeadzoneMode = Literal["fixed", "follow"]
+DEADZONE_MODES: tuple[DeadzoneMode, ...] = ("fixed", "follow")
+
+
+def parse_deadzone_mode(value: object) -> DeadzoneMode:
+    """Accept only the two published nose-deadzone modes."""
+
+    if value in DEADZONE_MODES:
+        return value  # type: ignore[return-value]
+    raise ValueError(f"deadzone_mode must be 'fixed' or 'follow', found {value!r}")
 
 # The state contract shipped with one top-level key per gesture, named after the
 # gesture rather than after its channel. The frontend and `output.session` still
@@ -235,6 +245,10 @@ class ControlStateMachine:
     # channel against the same bindings the machine is running under.
     bindings: BindingMap = field(default_factory=default_bindings)
     center: tuple[float, float] | None = None
+    # Last explicit / auto-recentre home. Fixed mode keeps the deadzone here.
+    # Follow mode may drag `center` away; calibrate and mode-switch snap back.
+    home: tuple[float, float] | None = None
+    deadzone_mode: DeadzoneMode = "fixed"
     mouth_rest: float | None = None
     eye_rest: float | None = None
     brow_rest: float | None = None
@@ -286,6 +300,7 @@ class ControlStateMachine:
         """
 
         self.center = nose
+        self.home = nose
         if mouth_rest is not None:
             self.mouth_rest = mouth_rest
             self._apply_mouth_thresholds()
@@ -300,6 +315,39 @@ class ControlStateMachine:
         self._direction = None
         self._still_since = None
         self._still_anchor = None
+
+    def set_deadzone_mode(self, mode: DeadzoneMode | str) -> DeadzoneMode:
+        """Switch fixed vs follow at runtime. Fixed snaps back to last home."""
+
+        parsed = parse_deadzone_mode(mode)
+        if parsed == "fixed" and parsed != self.deadzone_mode and self.home is not None:
+            self.center = self.home
+        self.deadzone_mode = parsed
+        return parsed
+
+    def _offset_from_center(self, nose: tuple[float, float]) -> tuple[float, float]:
+        if self.center is None:
+            return (0.0, 0.0)
+        return (nose[0] - self.center[0], nose[1] - self.center[1])
+
+    def _follow_deadzone(self, nose: tuple[float, float]) -> tuple[float, float]:
+        """Drag the deadzone so further look stays just outside it.
+
+        Once the nose clears `exit_radius`, extra travel pulls `center` along
+        so a short opposite move returns inside `enter_radius`. Home — the
+        last calibrate / auto-recentre — is left alone until the next reset.
+        """
+
+        if self.center is None:
+            return (0.0, 0.0)
+        offset = self._offset_from_center(nose)
+        radius = hypot(offset[0], offset[1] * self.thresholds.y_scale)
+        limit = self.thresholds.exit_radius
+        if radius <= limit:
+            return offset
+        scale = limit / radius
+        self.center = (nose[0] - offset[0] * scale, nose[1] - offset[1] * scale)
+        return self._offset_from_center(nose)
 
     def update(
         self,
@@ -347,11 +395,16 @@ class ControlStateMachine:
 
         if self.center is None:
             self.center = nose
+            if self.home is None:
+                self.home = nose
 
-        offset = (nose[0] - self.center[0], nose[1] - self.center[1])
+        offset = self._offset_from_center(nose)
+        if self.deadzone_mode == "follow":
+            offset = self._follow_deadzone(nose)
         self._update_movement(offset)
         if self.auto_recentre and self._drifted(nose, moment):
             self.center = nose
+            self.home = nose
             self.recentred = True
             self._still_since = None
             self._still_anchor = None
@@ -382,6 +435,7 @@ class ControlStateMachine:
         if brow_fired:
             # Same pose reset as overlay RESET / POST /calibrate, but do not
             # sample mouth_rest or brow_rest: the brows are raised.
+            # Calibrate also restores home, so follow-mode drag is cleared.
             self.calibrate(nose)
             offset = (0.0, 0.0)
             self._update_movement(offset)
@@ -634,6 +688,7 @@ class ControlStateMachine:
             },
             "tracking": tracking,
             "recentred": self.recentred,
+            "deadzone_mode": self.deadzone_mode,
         }
         for channel_name, legacy_key in LEGACY_CHANNEL_KEYS.items():
             state[legacy_key] = channels[channel_name]

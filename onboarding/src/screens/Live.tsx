@@ -25,7 +25,8 @@ interface LiveProps {
 }
 
 export function Live({ channel, onRestart }: LiveProps) {
-  const { state, config, status, setArmed, useMock, calibrate } = channel;
+  const { state, config, status, setArmed, useMock, calibrate, deadzoneMode, setDeadzoneMode } =
+    channel;
   const confidence = state.tracking ? 96 : 0;
   // Shot power is how long the mouth has stayed open, capped for display.
   const heldSeconds = state.mouth.held_seconds ?? 0;
@@ -142,6 +143,30 @@ export function Live({ channel, onRestart }: LiveProps) {
           />
         </div>
         <p className="live__motto">Play without limits.</p>
+        <div className="deadzone-switch" role="group" aria-label="Nose deadzone mode">
+          <span className="deadzone-switch__label">Deadzone</span>
+          <button
+            type="button"
+            className={`deadzone-switch__opt ${deadzoneMode === "fixed" ? "is-on" : ""}`}
+            aria-pressed={deadzoneMode === "fixed"}
+            onClick={() => setDeadzoneMode("fixed")}
+          >
+            Fixed center
+          </button>
+          <button
+            type="button"
+            className={`deadzone-switch__opt ${deadzoneMode === "follow" ? "is-on" : ""}`}
+            aria-pressed={deadzoneMode === "follow"}
+            onClick={() => setDeadzoneMode("follow")}
+          >
+            Follow
+          </button>
+        </div>
+        <p className="deadzone-switch__hint">
+          {deadzoneMode === "follow"
+            ? "Further look pulls the zone. A small opposite move stops."
+            : "Return to your calibrated center to release WASD."}
+        </p>
         <button
           className="btn btn--ghost live__restart"
           onClick={() => calibrate()}

@@ -198,12 +198,28 @@ def main(argv: list[str] | None = None) -> int:
         default=8765,
         help="serve the orientation UI on this localhost port",
     )
+    parser.add_argument(
+        "--deadzone-mode",
+        choices=("fixed", "follow"),
+        default="fixed",
+        help=(
+            "fixed (default): deadzone stays on the calibrated center. "
+            "follow: further look pulls the deadzone so a small opposite move stops. "
+            "The website toggle can still change this at runtime."
+        ),
+    )
     args = parser.parse_args(argv)
     preview = bool(args.preview) and not bool(args.no_preview)
 
     from bridge.server import run_product
 
-    return run_product(preview=preview, port=args.ui_port, mock=False, armed=True)
+    return run_product(
+        preview=preview,
+        port=args.ui_port,
+        mock=False,
+        armed=True,
+        deadzone_mode=args.deadzone_mode,
+    )
 
 
 if __name__ == "__main__":

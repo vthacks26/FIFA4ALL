@@ -9,6 +9,7 @@ Endpoints:
 - `POST /calibrate`   set the current nose position as neutral
 - `POST /arm`         start sending real key events to the focused application
 - `POST /disarm`      stop sending key events and release everything held
+- `POST /deadzone-mode` switch fixed vs follow deadzone on this process
 - `POST /mock`        drive the mock source from the frontend dev panel
 
 Server-Sent Events and multipart MJPEG are both plain HTTP, so this needs no
@@ -39,7 +40,7 @@ from output.focus import frontmost_application, game_has_focus
 from output.keyboard import QuartzKeyboard, build_keyboard
 from output.session import InputSession
 from tracking.bindings import selectable_channels
-from tracking.controls import DIRECTION_KEYS
+from tracking.controls import DEADZONE_MODES, DIRECTION_KEYS, parse_deadzone_mode
 
 DEFAULT_PORT = 8765
 UI_DIST = Path(__file__).resolve().parent.parent / "onboarding" / "dist"
@@ -330,6 +331,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
                     ],
                     "has_video": isinstance(self.hub.source, WebcamSource),
                     "keyboard_problem": QuartzKeyboard.permission_error(),
+                    "deadzone_mode": self.hub.source.machine.deadzone_mode,
                 }
             )
         elif self.path.startswith("/events"):
@@ -362,6 +364,14 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self._send_json({"ok": True})
             else:
                 self._send_json({"error": "server is not running a mock source"}, status=409)
+        elif self.path.startswith("/deadzone-mode"):
+            payload = self._read_json() or {}
+            try:
+                mode = self.hub.source.set_deadzone_mode(payload.get("mode"))
+            except ValueError as exc:
+                self._send_json({"error": str(exc)}, status=400)
+                return
+            self._send_json({"ok": True, "deadzone_mode": mode})
         else:
             self._send_json({"error": "not found"}, status=404)
 
@@ -494,6 +504,7 @@ def run_product(
     port: int = DEFAULT_PORT,
     mock: bool = False,
     armed: bool = True,
+    deadzone_mode: str = "fixed",
 ) -> int:
     """One process: MacBook camera, Quartz holds, overlay, orientation UI."""
 
@@ -535,6 +546,7 @@ def run_product(
         session = InputSession(build_keyboard(), armed=armed)
         camera_line = f"{chosen.index}:{chosen.name!r}"
 
+    source.set_deadzone_mode(deadzone_mode)
     server, hub = build_server(source, port, session)
     bound_port = int(server.server_address[1])
     intro = orientation_ui_url(bound_port)
@@ -542,6 +554,8 @@ def run_product(
         f"FIFA4ALL live on {intro}  camera={camera_line}",
         "  same process: Quartz WASD / Space hold / wink-L hold",
         "  overlay RESET, raised eyebrows, and POST /calibrate recapture neutral",
+        f"  deadzone={source.machine.deadzone_mode} "
+        "(site toggle or --deadzone-mode; default fixed-center)",
     ]
     if preview:
         banner.append(
@@ -607,16 +621,31 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="same as --preview (kept for older scripts)",
     )
+    parser.add_argument(
+        "--deadzone-mode",
+        choices=DEADZONE_MODES,
+        default="fixed",
+        help=(
+            "fixed (default): deadzone stays on the calibrated center. "
+            "follow: further look pulls the deadzone so a small opposite move stops. "
+            "The website toggle can still change this at runtime."
+        ),
+    )
     args = parser.parse_args(argv)
     preview = (bool(args.preview) or bool(args.overlay)) and not bool(args.no_preview)
+    mode = parse_deadzone_mode(args.deadzone_mode)
     if args.mock:
-        return run_product(preview=preview, port=args.port, mock=True, armed=False)
+        return run_product(
+            preview=preview, port=args.port, mock=True, armed=False, deadzone_mode=mode
+        )
     print(
         "Starting the live product "
         f"(python -m tracking.live {'--preview' if preview else '--no-preview'})",
         flush=True,
     )
-    return run_product(preview=preview, port=args.port, mock=False, armed=True)
+    return run_product(
+        preview=preview, port=args.port, mock=False, armed=True, deadzone_mode=mode
+    )
 
 
 def _build_overlay(hub: ControlHub) -> "Callable[[dict[str, object]], None]":

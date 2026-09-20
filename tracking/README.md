@@ -95,6 +95,13 @@ It displays suggested labels only:
 
 - nose leaves the center deadzone screen-left/screen-right: `D` / `A`
 - nose leaves the center deadzone up/down: `W` / `S`
+
+Nose deadzone modes (live product, `python -m tracking.live`):
+
+- **fixed** (default): the zone stays on the last calibrated center. Return into that original zone to release WASD.
+- **follow**: once the nose is just outside, further look pulls the zone along. A small opposite move back into the pulled zone stops you.
+
+Switch on the live website HUD (**Deadzone → Fixed center / Follow**); it persists in the browser and applies to this process immediately. Or start with `--deadzone-mode follow`. Eyebrow raise, site calibrate, and overlay RESET still recapture the center.
 - mouth open: `Space`
 - left wink: `L`
 

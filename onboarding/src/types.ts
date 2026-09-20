@@ -4,6 +4,8 @@ export type Direction = "N" | "NE" | "E" | "SE" | "S" | "SW" | "W" | "NW";
 
 export type MovementKey = "W" | "A" | "S" | "D";
 
+export type DeadzoneMode = "fixed" | "follow";
+
 export interface ExpressionState {
   readonly active: boolean;
   /** True only on the frame the gesture crossed its trigger threshold. */
@@ -43,6 +45,8 @@ export interface ControlState {
   readonly frontmost?: string | null;
   /** True when a browser is frontmost and could be receiving the keys. */
   readonly game_focus?: boolean;
+  /** Live nose-deadzone mode on this process. Absent in older payloads. */
+  readonly deadzone_mode?: DeadzoneMode;
 }
 
 export interface Thresholds {
@@ -71,6 +75,8 @@ export interface BridgeConfig {
   readonly has_video: boolean;
   /** Why keyboard output cannot work, or null when it can. */
   readonly keyboard_problem?: string | null;
+  /** Nose deadzone on this process. Default is fixed-center. */
+  readonly deadzone_mode?: DeadzoneMode;
 }
 
 /** Orientation phases, in the order defined by TECHNICAL_SPEC.md. */
