@@ -60,7 +60,7 @@ export function Reticle({
   const neutral = thresholds.exit_radius;
   const inner = thresholds.enter_radius;
   // Outer follow ring sits beyond the WASD chips and the inner deadzone.
-  const follow = thresholds.follow_radius ?? neutral * 2.75;
+  const follow = thresholds.follow_radius ?? 0.085;
   const outer = Math.max(follow, neutral * 2.2);
   const circumference = 2 * Math.PI * neutral;
   const moving = state.direction !== null;

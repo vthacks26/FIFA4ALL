@@ -81,8 +81,9 @@ class ControlThresholds:
     exit_radius: float = 0.040
     # Follow-mode outer ring. Must sit beyond the inner deadzone and the
     # WASD chips (those are drawn at 2.1 * exit_radius ≈ 0.084). The zone
-    # only drags when the nose is outside this radius.
-    follow_radius: float = 0.170
+    # only drags when the nose is outside this radius. Half of the original
+    # 0.170 ring so a shorter look starts dragging.
+    follow_radius: float = 0.085
     y_scale: float = 1.15
     # Degrees a held direction keeps past its 45-degree zone before handing
     # over. Without this the nose resting on a boundary flaps between, say, N

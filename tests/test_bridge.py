@@ -187,7 +187,7 @@ class BridgeServerTests(unittest.TestCase):
 
             post(
                 self.url("/mock"),
-                {"tracking": True, "nose": {"x": 0.11, "y": 0.0}, "mouth": 0.0, "wink": 0.0},
+                {"tracking": True, "nose": {"x": 0.20, "y": 0.0}, "mouth": 0.0, "wink": 0.0},
             )
             released = self.read_one_event()
             self.assertEqual(released["keys"], [])

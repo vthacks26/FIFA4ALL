@@ -620,7 +620,7 @@ class StateContractTests(unittest.TestCase):
         self.assertEqual(published["enter_radius"], 0.029)
         self.assertEqual(published["exit_radius"], 0.040)
         self.assertEqual(published["follow_radius"], ControlThresholds().follow_radius)
-        self.assertEqual(published["follow_radius"], 0.170)
+        self.assertEqual(published["follow_radius"], 0.085)
         self.assertIn("mouth_open", published)
         self.assertIn("brow_on", published)
         self.assertIn("brow_off", published)
@@ -837,7 +837,7 @@ class ChannelViewTests(unittest.TestCase):
 class FollowDeadzoneTests(unittest.TestCase):
     """Two-radius follow: outer ring drags; the band inside it holds WASD."""
 
-    # Beyond follow_radius (0.170) so the first update must slide the center.
+    # Beyond follow_radius (0.085) so the first update must slide the center.
     FAR_EAST = at(0.28, 0.0)
 
     def follow_machine(self) -> ControlStateMachine:
@@ -866,12 +866,12 @@ class FollowDeadzoneTests(unittest.TestCase):
 
     def test_follow_does_not_drag_inside_the_outer_ring(self) -> None:
         state = self.follow_machine()
-        # Past the deadzone, short of the outer follow ring.
-        mid = at(0.12, 0.0)
+        # Past the deadzone, short of the outer follow ring (0.085).
+        mid = at(0.06, 0.0)
         result = state.update(nose=mid, features=NEUTRAL, tracking_valid=True)
         self.assertEqual(result["keys"], ["D"])
         self.assertEqual(state.center, CENTER)
-        self.assertAlmostEqual(result["nose"]["x"], 0.12, places=3)
+        self.assertAlmostEqual(result["nose"]["x"], 0.06, places=3)
 
     def test_follow_holds_wasd_after_a_small_move_back_from_the_outer_ring(self) -> None:
         state = self.follow_machine()
