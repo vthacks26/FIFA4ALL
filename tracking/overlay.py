@@ -3,7 +3,7 @@
 OpenCV's HighGUI window would otherwise become key and steal Luna/Chrome
 focus. After the first ``imshow``, we retarget that Cocoa window: floating
 level and ``NSWindowStyleMaskNonactivatingPanel``. The window accepts mouse
-events and hosts a real AppKit Reset button (not click-through).
+events and hosts real AppKit Reset / Fixed / Follow buttons (not click-through).
 """
 
 from __future__ import annotations
@@ -29,6 +29,8 @@ _BEZEL_ROUNDED = 1
 _NS_ON = 1
 
 _RESET_BUTTON: Any = None
+_FIXED_BUTTON: Any = None
+_FOLLOW_BUTTON: Any = None
 
 
 class _NSPoint(Structure):
@@ -128,7 +130,7 @@ def decorate_overlay_window(title: str = WINDOW_TITLE) -> bool:
             argtypes=[c_bool],
         )
         _send(window, "orderFrontRegardless", restype=None, argtypes=[])
-        _attach_reset_button(window, _send, _sel, objc)
+        _attach_overlay_buttons(window, _send, _sel, objc)
         found = True
     return found
 
@@ -136,7 +138,20 @@ def decorate_overlay_window(title: str = WINDOW_TITLE) -> bool:
 def poll_reset_click() -> bool:
     """True once when the AppKit Reset button is toggled on (a real click)."""
 
-    button = _RESET_BUTTON
+    return _poll_button_on(_RESET_BUTTON)
+
+
+def poll_mode_click() -> str | None:
+    """`fixed` or `follow` once when that AppKit deadzone button is clicked."""
+
+    if _poll_button_on(_FIXED_BUTTON):
+        return "fixed"
+    if _poll_button_on(_FOLLOW_BUTTON):
+        return "follow"
+    return None
+
+
+def _poll_button_on(button: Any) -> bool:
     if not button or sys.platform != "darwin":
         return False
     try:
@@ -166,10 +181,10 @@ def parse_ns_frame(description: str) -> tuple[float, float, float, float] | None
     return float(nums[0]), float(nums[1]), float(nums[2]), float(nums[3])
 
 
-def _attach_reset_button(window: Any, _send: Any, _sel: Any, objc: Any) -> None:
-    """Put a real NSButton on the look-axis window. Parent is not click-through."""
+def _attach_overlay_buttons(window: Any, _send: Any, _sel: Any, objc: Any) -> None:
+    """Put real NSButtons on the look-axis window. Parent is not click-through."""
 
-    global _RESET_BUTTON
+    global _RESET_BUTTON, _FIXED_BUTTON, _FOLLOW_BUTTON
     from ctypes import c_char_p, c_long, c_ulong, c_void_p
 
     def _nsstring(text: str) -> Any:
@@ -186,40 +201,56 @@ def _attach_reset_button(window: Any, _send: Any, _sel: Any, objc: Any) -> None:
         raw = _send(nsstr, "UTF8String", restype=c_char_p, argtypes=[])
         return raw.decode("utf-8") if raw else ""
 
+    def _make_button(title: str) -> Any:
+        button = _send(objc.objc_getClass(b"NSButton"), "new")
+        if not button:
+            return None
+        _send(button, "setTitle:", _nsstring(title), argtypes=[c_void_p])
+        _send(button, "setButtonType:", _BUTTON_ON_OFF, restype=None, argtypes=[c_ulong])
+        _send(button, "setBezelStyle:", _BEZEL_ROUNDED, restype=None, argtypes=[c_ulong])
+        return button
+
+    def _place(button: Any, origin: _NSPoint, size: _NSSize) -> None:
+        _send(button, "setFrameSize:", size, argtypes=[_NSSize])
+        _send(button, "setFrameOrigin:", origin, argtypes=[_NSPoint])
+        _send(
+            content,
+            "addSubview:positioned:relativeTo:",
+            button,
+            _WINDOW_ABOVE,
+            None,
+            restype=None,
+            argtypes=[c_void_p, c_long, c_void_p],
+        )
+
     content = _send(window, "contentView")
     if not content:
         return
     if _RESET_BUTTON is None:
-        button = _send(objc.objc_getClass(b"NSButton"), "new")
-        if not button:
-            return
-        _send(button, "setTitle:", _nsstring("Reset"), argtypes=[c_void_p])
-        _send(button, "setButtonType:", _BUTTON_ON_OFF, restype=None, argtypes=[c_ulong])
-        _send(button, "setBezelStyle:", _BEZEL_ROUNDED, restype=None, argtypes=[c_ulong])
-        _RESET_BUTTON = button
-    button = _RESET_BUTTON
-    _send(button, "setFrameSize:", _NSSize(132, 36), argtypes=[_NSSize])
+        _RESET_BUTTON = _make_button("Reset")
+    if _FIXED_BUTTON is None:
+        _FIXED_BUTTON = _make_button("Fixed")
+    if _FOLLOW_BUTTON is None:
+        _FOLLOW_BUTTON = _make_button("Follow")
+    if not _RESET_BUTTON or not _FIXED_BUTTON or not _FOLLOW_BUTTON:
+        return
+
     bounds_val = _send(content, "valueForKey:", _nsstring("bounds"), argtypes=[c_void_p])
     parsed = parse_ns_frame(_utf8(_send(bounds_val, "description")) if bounds_val else "")
     if parsed:
         _bw, _bh, width, height = parsed
-        _send(
-            button,
-            "setFrameOrigin:",
-            _NSPoint(max(8.0, width - 140.0), max(8.0, height - 44.0)),
-            argtypes=[_NSPoint],
-        )
+        reset_origin = _NSPoint(max(8.0, width - 140.0), max(8.0, height - 44.0))
+        mode_y = max(8.0, reset_origin.y - 40.0)
+        fixed_origin = _NSPoint(reset_origin.x, mode_y)
+        follow_origin = _NSPoint(reset_origin.x + 68.0, mode_y)
     else:
-        _send(button, "setFrameOrigin:", _NSPoint(8.0, 8.0), argtypes=[_NSPoint])
-    _send(
-        content,
-        "addSubview:positioned:relativeTo:",
-        button,
-        _WINDOW_ABOVE,
-        None,
-        restype=None,
-        argtypes=[c_void_p, c_long, c_void_p],
-    )
+        reset_origin = _NSPoint(8.0, 48.0)
+        fixed_origin = _NSPoint(8.0, 8.0)
+        follow_origin = _NSPoint(76.0, 8.0)
+
+    _place(_RESET_BUTTON, reset_origin, _NSSize(132, 36))
+    _place(_FIXED_BUTTON, fixed_origin, _NSSize(64, 32))
+    _place(_FOLLOW_BUTTON, follow_origin, _NSSize(64, 32))
 
 
 def restore_chrome_focus() -> None:

@@ -139,6 +139,11 @@ class ResetButtonTests(unittest.TestCase):
     def test_parse_ns_frame(self):
         self.assertEqual(parse_ns_frame("{{12, 34}, {640, 480}}"), (12.0, 34.0, 640.0, 480.0))
 
+    def test_poll_mode_click_is_idle_without_appkit_buttons(self):
+        from tracking.overlay import poll_mode_click
+
+        self.assertIsNone(poll_mode_click())
+
     def test_recalibrate_clears_joystick_center(self):
         joystick = NoseJoystickState()
         joystick.update((0.4, 0.4))

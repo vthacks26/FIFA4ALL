@@ -54,7 +54,7 @@ With the venv still active, from the repository root:
 MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --preview
 ```
 
-`--preview` waits until the orientation UI is listening, then opens **http://127.0.0.1:8765/** (Welcome / onboarding) with macOS `/usr/bin/open`. The look-axis overlay is a **separate** camera window (`FIFA4ALL look axis`): mirrored MacBook frame, face landmarks, WASD axis, current keys, orange **RESET**. Website chrome stays in the browser; it is not drawn on the camera overlay. You do not need `npm run dev`.
+`--preview` waits until the orientation UI is listening, then opens **http://127.0.0.1:8765/** (Welcome / onboarding) with macOS `/usr/bin/open`. The look-axis overlay is a **separate** camera window (`FIFA4ALL look axis`): mirrored MacBook frame, face landmarks, WASD axis, current keys, orange **RESET**, and the **FIXED / FOLLOW** deadzone switch. Website chrome stays in the browser; it is not drawn on the camera overlay. You do not need `npm run dev`.
 
 To inject without opening a browser (keeps Luna focused):
 
@@ -102,9 +102,11 @@ WASD uses a nose deadzone. Two modes are available; **fixed center is the defaul
 | **Fixed center** (default) | The deadzone stays around the last calibrated center (start, eyebrows, **Find your center**, **Reset center**, overlay **RESET**). | Return into that original zone to release WASD. |
 | **Follow** | Once the nose is just outside the deadzone, further movement in that direction pulls / drags the zone along. | A small opposite-direction move back into the pulled zone stops you — you do not have to return to the original calibrate center. |
 
-Switch at runtime from the live website HUD (**Deadzone → Fixed center / Follow**). The choice is stored in the browser and POSTed to this `tracking.live` process, so it applies to the keys already being injected. Recentre / calibrate still resets the center as today.
+Switch at runtime from the look-axis overlay (`FIFA4ALL look axis`): tap **FIXED** or **FOLLOW** under **RESET**. That click changes `ControlStateMachine` on this process immediately, so the WASD keys Quartz is already injecting use the new deadzone. Recentre / calibrate still resets the center as today.
 
-Optional startup flag (the website toggle can still change it afterwards):
+The onboarding website toggle still POSTs `/deadzone-mode` if you have that tab open; it is optional. The overlay switch is the one to use while tracking.
+
+Optional startup flag (the overlay switch can still change it afterwards):
 
 ```bash
 MPLCONFIGDIR=.cache/matplotlib python -m tracking.live --preview --deadzone-mode follow
@@ -127,4 +129,4 @@ More tracking notes: [`tracking/README.md`](tracking/README.md). Orientation scr
 - **Shooting** waits 200ms after mouth-open is detected (open/reset hysteresis still applies) before holding Space, so FIFA's charge does not start on a brief open. If the mouth closes before 200ms, Space is never pressed. After Space is down, a longer open is a more powerful shot. Calibration samples the resting mouth, because a mouth at rest does not read zero and a fixed threshold can latch Space open permanently.
 - **Passing** accepts either eye. A blink is rejected by requiring the other eye to stay open.
 - **Recentre** by raising your eyebrows (or overlay **RESET** / website **Find your center**). Detection is the brow-to-eyelid gap above the resting value sampled on the first valid face and again on click-calibrate, so a normal open mouth used for shoot does not reset. The trigger is edge-latched: a held raise fires once until you lower your brows.
-- **Movement** releases every key when tracking is lost, so a lost face cannot leave the player running. In **fixed** deadzone mode, WASD releases when the nose returns to the calibrated center zone. In **follow** mode, further look drags that zone so a short opposite move is enough to stop. Switch on the live HUD; default is fixed.
+- **Movement** releases every key when tracking is lost, so a lost face cannot leave the player running. In **fixed** deadzone mode, WASD releases when the nose returns to the calibrated center zone. In **follow** mode, further look drags that zone so a short opposite move is enough to stop. Switch **FIXED / FOLLOW** on the look-axis overlay; default is fixed.

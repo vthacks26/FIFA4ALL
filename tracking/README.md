@@ -95,15 +95,15 @@ It displays suggested labels only:
 
 - nose leaves the center deadzone screen-left/screen-right: `D` / `A`
 - nose leaves the center deadzone up/down: `W` / `S`
+- mouth open: `Space`
+- left wink: `L`
 
 Nose deadzone modes (live product, `python -m tracking.live`):
 
 - **fixed** (default): the zone stays on the last calibrated center. Return into that original zone to release WASD.
 - **follow**: once the nose is just outside, further look pulls the zone along. A small opposite move back into the pulled zone stops you.
 
-Switch on the live website HUD (**Deadzone → Fixed center / Follow**); it persists in the browser and applies to this process immediately. Or start with `--deadzone-mode follow`. Eyebrow raise, site calibrate, and overlay RESET still recapture the center.
-- mouth open: `Space`
-- left wink: `L`
+Switch **FIXED / FOLLOW** on the look-axis overlay (`FIFA4ALL look axis`, under RESET). That click changes the live `ControlStateMachine` used for Quartz WASD. Or start with `--deadzone-mode follow`. The website toggle still POSTs through if the tab is open. Eyebrow raise, site calibrate, and overlay RESET still recapture the center.
 
 The MediaPipe preview acts like a virtual joystick: the first valid nose point is neutral, returning to center means no movement, and pressing `r` resets the neutral center.
 

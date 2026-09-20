@@ -158,8 +158,13 @@ input is ever held perfectly still.
 
 ### Nose deadzone
 
-The live HUD has a **Deadzone** switch (persisted in `localStorage` as
-`fifa4all.deadzoneMode` and applied with `POST /deadzone-mode`):
+The look-axis overlay (`FIFA4ALL look axis`) is the switch used while tracking:
+tap **FIXED** or **FOLLOW** under **RESET**. That changes the same
+`ControlStateMachine` Quartz reads for WASD.
+
+The live website HUD still has a **Deadzone** switch (persisted in
+`localStorage` as `fifa4all.deadzoneMode` and applied with
+`POST /deadzone-mode`) if that tab is open.
 
 - **Fixed center** (default): the zone stays on the last calibrate / RESET home.
   Return into that original zone to release WASD.
