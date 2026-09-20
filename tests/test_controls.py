@@ -818,6 +818,31 @@ class FollowDeadzoneTests(unittest.TestCase):
         self.assertEqual(held["keys"], ["D"])
         self.assertAlmostEqual(held["nose"]["x"], state.thresholds.follow_radius, places=3)
 
+    def test_held_look_in_follow_does_not_auto_recalibrate(self) -> None:
+        """A still D hold must stay in D; do not snap home onto the nose."""
+
+        state = self.follow_machine()
+        first = state.update(
+            nose=self.FAR_EAST, features=NEUTRAL, tracking_valid=True, now=0.0
+        )
+        self.assertEqual(first["keys"], ["D"])
+        dragged = state.center
+        # Same pose well past recentre_seconds (3.5). Fixed mode would snap.
+        held = state.update(
+            nose=self.FAR_EAST, features=NEUTRAL, tracking_valid=True, now=5.0
+        )
+        self.assertFalse(held["recentred"])
+        self.assertEqual(held["keys"], ["D"])
+        self.assertFalse(held["centered"])
+        self.assertEqual(state.home, CENTER)
+        self.assertEqual(state.center, dragged)
+        self.assertNotEqual(state.center, self.FAR_EAST)
+        self.assertAlmostEqual(
+            self.FAR_EAST[0] - state.center[0],
+            state.thresholds.follow_radius,
+            places=3,
+        )
+
     def test_calibrate_resets_a_followed_deadzone_to_the_new_home(self) -> None:
         state = self.follow_machine()
         state.update(nose=self.FAR_EAST, features=NEUTRAL, tracking_valid=True)
