@@ -415,7 +415,15 @@ class ControlStateMachine:
         if self.deadzone_mode == "follow":
             offset = self._follow_deadzone(nose)
         self._update_movement(offset)
-        if self.auto_recentre and self._drifted(nose, moment):
+        if self.deadzone_mode == "follow":
+            # A held look is intent. The 3.5s stillness auto-recentre would
+            # snap home onto the current nose and drop WASD — that is the
+            # silent Follow recenter. Recentre only from eyebrows / RESET /
+            # website calibrate. Clear the stillness window so a later
+            # switch back to fixed does not inherit a half-elapsed timer.
+            self._still_since = None
+            self._still_anchor = None
+        elif self.auto_recentre and self._drifted(nose, moment):
             self.center = nose
             self.home = nose
             self.recentred = True

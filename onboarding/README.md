@@ -152,11 +152,13 @@ bridge releases every held key, so a lost face cannot leave the player running.
 
 ### Drift
 
-Posture settles over a few minutes and the neutral centre moves with it, which
-makes the player walk with no input. If the nose holds still outside the dead
-zone for 3.5 seconds that is drift rather than intent, so neutral is re-set
-there and the HUD confirms it. The window is deliberately longer than a steering
-input is ever held perfectly still.
+In **fixed** mode, posture settling can walk the player with no input. If the
+nose holds still outside the dead zone for 3.5 seconds that is treated as
+drift, so neutral is re-set there and the HUD confirms it.
+
+**Follow** skips that timer. A held look (for example D) stays in that
+direction; recenter only from eyebrows, overlay RESET, or website Find your
+center / Reset center.
 
 ### Nose deadzone
 
@@ -174,6 +176,6 @@ The live website HUD still has a **Deadzone** switch (persisted in
   beyond the WASD chips; the zone only follows when the nose is in that outer
   region (center slides so the nose stays on the ring). Between the rings the
   current direction stays held, so a small move back from the outer edge still
-  moves. Recentre (eyebrows, Find your center, Reset center, overlay RESET)
-  still resets the home as today. The live HUD camera is a large color face
-  feed; the OpenCV look-axis window stays separate.
+  moves. A held look does not auto-recentre. Recentre only from eyebrows,
+  Find your center, Reset center, or overlay RESET. The live HUD camera is a
+  large color face feed; the OpenCV look-axis window stays separate.
