@@ -205,7 +205,7 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "fixed (default): deadzone stays on the calibrated center. "
             "follow: further look pulls the deadzone so a small opposite move stops. "
-            "The website toggle can still change this at runtime."
+            "The overlay FIXED/FOLLOW switch can still change this at runtime."
         ),
     )
     args = parser.parse_args(argv)

@@ -555,7 +555,7 @@ def run_product(
         "  same process: Quartz WASD / Space hold / wink-L hold",
         "  overlay RESET, raised eyebrows, and POST /calibrate recapture neutral",
         f"  deadzone={source.machine.deadzone_mode} "
-        "(site toggle or --deadzone-mode; default fixed-center)",
+        "(overlay FIXED/FOLLOW switch; default fixed-center)",
     ]
     if preview:
         banner.append(
@@ -628,7 +628,7 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "fixed (default): deadzone stays on the calibrated center. "
             "follow: further look pulls the deadzone so a small opposite move stops. "
-            "The website toggle can still change this at runtime."
+            "The overlay FIXED/FOLLOW switch can still change this at runtime."
         ),
     )
     args = parser.parse_args(argv)
@@ -653,9 +653,14 @@ def _build_overlay(hub: ControlHub) -> "Callable[[dict[str, object]], None]":
 
     import cv2  # type: ignore[import-not-found]
 
-    from bridge.overlay_view import draw_overlay, reset_button_rect
+    from bridge.overlay_view import apply_overlay_click, draw_overlay
     from output.focus import restore_game_focus
-    from tracking.overlay import WINDOW_TITLE, decorate_overlay_window, poll_reset_click
+    from tracking.overlay import (
+        WINDOW_TITLE,
+        decorate_overlay_window,
+        poll_mode_click,
+        poll_reset_click,
+    )
 
     state_box: dict[str, bool] = {"decorated": False, "mouse": False}
 
@@ -666,9 +671,9 @@ def _build_overlay(hub: ControlHub) -> "Callable[[dict[str, object]], None]":
         if frame is None:
             return
         height, width = frame.shape[:2]
-        x1, y1, x2, y2 = reset_button_rect(width, height)
-        if x1 <= x <= x2 and y1 <= y <= y2:
-            hub.source.calibrate()
+        action = apply_overlay_click(hub.source, x, y, width, height)
+        if action in ("fixed", "follow"):
+            print(f"Deadzone: {action} (overlay switch)", flush=True)
 
     def render(state: dict[str, object]) -> None:
         source = hub.source
@@ -688,6 +693,10 @@ def _build_overlay(hub: ControlHub) -> "Callable[[dict[str, object]], None]":
             restore_game_focus()
         if poll_reset_click():
             source.calibrate()
+        mode = poll_mode_click()
+        if mode is not None:
+            source.set_deadzone_mode(mode)
+            print(f"Deadzone: {mode} (overlay switch)", flush=True)
 
     return render
 

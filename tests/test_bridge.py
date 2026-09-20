@@ -537,8 +537,101 @@ class OverlayStaysSeparateTests(unittest.TestCase):
         ):
             self.assertNotIn(phrase, overlay)
         self.assertIn('"RESET"', overlay)
+        self.assertIn('"FIXED"', overlay)
+        self.assertIn('"FOLLOW"', overlay)
         self.assertIn('"NO FACE"', overlay)
         self.assertIn('"FIFA4ALL"', overlay)
+
+
+class OverlayDeadzoneSwitchTests(unittest.TestCase):
+    """FIXED / FOLLOW on the look-axis overlay drive the live injector."""
+
+    def test_mode_buttons_sit_under_reset_and_do_not_overlap_it(self) -> None:
+        from bridge.overlay_view import hit_mode_button, mode_button_rects, reset_button_rect
+
+        width, height = 640, 360
+        rx1, ry1, rx2, ry2 = reset_button_rect(width, height)
+        rects = mode_button_rects(width, height)
+        self.assertEqual(set(rects), {"fixed", "follow"})
+        for mode, (x1, y1, x2, y2) in rects.items():
+            with self.subTest(mode=mode):
+                self.assertGreater(y1, ry2)
+                self.assertLess(x1, x2)
+                self.assertLess(y1, y2)
+                self.assertGreaterEqual(x1, rx1)
+                self.assertLessEqual(x2, rx2)
+                self.assertIsNone(hit_mode_button((rx1 + rx2) // 2, (ry1 + ry2) // 2, width, height))
+                self.assertEqual(hit_mode_button((x1 + x2) // 2, (y1 + y2) // 2, width, height), mode)
+
+    def test_overlay_follow_click_changes_the_same_machine_as_injected_keys(self) -> None:
+        from bridge.overlay_view import apply_overlay_click, mode_button_rects
+        from bridge.source import MockSource
+        from output.keyboard import RecordingKeyboard
+        from output.session import InputSession
+
+        source = MockSource()
+        source.machine.calibrate((0.5, 0.5))
+        keyboard = RecordingKeyboard()
+        session = InputSession(keyboard, armed=True)
+        self.assertEqual(source.machine.deadzone_mode, "fixed")
+
+        fx1, fy1, fx2, fy2 = mode_button_rects(640, 360)["follow"]
+        self.assertEqual(
+            apply_overlay_click(source, (fx1 + fx2) // 2, (fy1 + fy2) // 2, 640, 360),
+            "follow",
+        )
+        self.assertEqual(source.machine.deadzone_mode, "follow")
+
+        far = source.machine.update(
+            nose=(0.70, 0.50), features={}, tracking_valid=True
+        )
+        session.apply(far)
+        self.assertEqual(far["keys"], ["D"])
+        self.assertIn("D", keyboard.held)
+
+        released = source.machine.update(
+            nose=(0.67, 0.50), features={}, tracking_valid=True
+        )
+        session.apply(released)
+        self.assertEqual(released["keys"], [])
+        self.assertTrue(released["centered"])
+        self.assertEqual(keyboard.held, set())
+
+        xx1, xy1, xx2, xy2 = mode_button_rects(640, 360)["fixed"]
+        self.assertEqual(
+            apply_overlay_click(source, (xx1 + xx2) // 2, (xy1 + xy2) // 2, 640, 360),
+            "fixed",
+        )
+        self.assertEqual(source.machine.deadzone_mode, "fixed")
+
+    def test_live_overlay_callback_wires_mode_clicks_to_the_machine(self) -> None:
+        from pathlib import Path
+
+        server = (Path(__file__).resolve().parent.parent / "bridge" / "server.py").read_text(
+            encoding="utf-8"
+        )
+        overlay = (
+            Path(__file__).resolve().parent.parent / "tracking" / "overlay.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("apply_overlay_click", server)
+        self.assertIn("poll_mode_click", server)
+        self.assertIn("set_deadzone_mode", server)
+        self.assertIn("poll_mode_click", overlay)
+        self.assertIn('"Fixed"', overlay)
+        self.assertIn('"Follow"', overlay)
+
+    def test_overlay_reset_click_still_calibrates(self) -> None:
+        from bridge.overlay_view import apply_overlay_click, reset_button_rect
+        from bridge.source import MockSource
+
+        source = MockSource()
+        source.machine.calibrate((0.5, 0.5))
+        x1, y1, x2, y2 = reset_button_rect(640, 360)
+        self.assertEqual(
+            apply_overlay_click(source, (x1 + x2) // 2, (y1 + y2) // 2, 640, 360),
+            "reset",
+        )
+        self.assertIsNone(source.machine.center)
 
 
 class OrientationCameraFeedTests(unittest.TestCase):

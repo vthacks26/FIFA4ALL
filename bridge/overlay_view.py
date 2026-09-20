@@ -2,8 +2,9 @@
 
 The orientation website (browser, http://127.0.0.1:8765/) is a separate UI:
 onboarding, practice, and live telemetry. This native window is camera/vision
-only — the mirrored MacBook frame, face landmarks, WASD look-axis, and RESET.
-Do not draw website chrome (Welcome, training copy, brand shell) here.
+only — the mirrored MacBook frame, face landmarks, WASD look-axis, RESET,
+and the Fixed / Follow deadzone switch. Do not draw website chrome
+(Welcome, training copy, brand shell) here.
 
 Window behaviour comes from `tracking.overlay`, which makes the OpenCV window a
 non-activating panel that floats above a fullscreen Luna without taking focus.
@@ -71,6 +72,7 @@ def draw_overlay(cv2: Any, frame: Any, state: Mapping[str, object], thresholds: 
 
     _draw_status(cv2, view, state, width, height)
     _draw_reset(cv2, view, width)
+    _draw_mode_switch(cv2, view, state, width, height)
     return view
 
 
@@ -80,6 +82,47 @@ def reset_button_rect(width: int, height: int) -> tuple[int, int, int, int]:
     margin = 10
     x2 = max(margin + box_w, width - margin)
     return (x2 - box_w, margin, x2, margin + box_h)
+
+
+def mode_button_rects(width: int, height: int) -> dict[str, tuple[int, int, int, int]]:
+    """FIXED / FOLLOW sit just under RESET in the same look-axis HUD."""
+
+    rx1, _ry1, rx2, ry2 = reset_button_rect(width, height)
+    box_h = min(40, max(28, height // 10))
+    gap = 6
+    y1 = ry2 + gap
+    y2 = min(height - 8, y1 + box_h)
+    mid = (rx1 + rx2) // 2
+    return {
+        "fixed": (rx1, y1, mid - 2, y2),
+        "follow": (mid + 2, y1, rx2, y2),
+    }
+
+
+def hit_mode_button(x: int, y: int, width: int, height: int) -> str | None:
+    """Return `fixed` or `follow` when the click is on that overlay button."""
+
+    for mode, (x1, y1, x2, y2) in mode_button_rects(width, height).items():
+        if x1 <= x <= x2 and y1 <= y <= y2:
+            return mode
+    return None
+
+
+def apply_overlay_click(source: Any, x: int, y: int, width: int, height: int) -> str | None:
+    """Hit-test overlay controls on the same machine that injects WASD.
+
+    Returns ``reset``, ``fixed``, ``follow``, or None.
+    """
+
+    x1, y1, x2, y2 = reset_button_rect(width, height)
+    if x1 <= x <= x2 and y1 <= y <= y2:
+        source.calibrate()
+        return "reset"
+    mode = hit_mode_button(x, y, width, height)
+    if mode is None:
+        return None
+    source.set_deadzone_mode(mode)
+    return mode
 
 
 def _draw_reset(cv2: Any, view: Any, width: int) -> None:
@@ -97,6 +140,28 @@ def _draw_reset(cv2: Any, view: Any, width: int) -> None:
         2,
         cv2.LINE_AA,
     )
+
+
+def _draw_mode_switch(cv2: Any, view: Any, state: Mapping[str, object], width: int, height: int) -> None:
+    current = state.get("deadzone_mode")
+    if current not in ("fixed", "follow"):
+        current = "fixed"
+    labels = {"fixed": "FIXED", "follow": "FOLLOW"}
+    for mode, (x1, y1, x2, y2) in mode_button_rects(width, height).items():
+        active = mode == current
+        fill = LIME if active else (60, 60, 60)
+        cv2.rectangle(view, (x1, y1), (x2, y2), fill, -1)
+        cv2.rectangle(view, (x1, y1), (x2, y2), WHITE if active else GREY, 2)
+        label = labels[mode]
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        scale = 0.45
+        (tw, th), _ = cv2.getTextSize(label, font, scale, 2)
+        tx = x1 + max(4, (x2 - x1 - tw) // 2)
+        ty = y1 + (y2 - y1 + th) // 2
+        cv2.putText(
+            view, label, (tx, ty), font, scale,
+            (20, 20, 20) if active else WHITE, 2, cv2.LINE_AA,
+        )
 
 
 def _draw_status(cv2: Any, view: Any, state: Mapping[str, object], width: int, height: int) -> None:
