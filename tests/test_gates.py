@@ -83,6 +83,26 @@ class SmileMouthNearRestGateTests(unittest.TestCase):
         self.assertTrue(state["channels"]["smile_width"]["gated"])
 
 
+class WinkPoseOcclusionGateTests(unittest.TestCase):
+    def test_one_eye_open_also_rejects_a_tilt_covered_eye(self) -> None:
+        control = machine()
+        self.assertFalse(
+            control.gate_passes(
+                CHANNELS["wink"],
+                {**REST, "left_wink": 0.105, "left_eye_opening": 0.005, "head_tilt": 40.0},
+            )
+        )
+
+    def test_a_frontal_wink_still_clears_the_gate(self) -> None:
+        control = machine()
+        self.assertTrue(
+            control.gate_passes(
+                CHANNELS["wink"],
+                {**REST, "left_wink": 0.095, "left_eye_opening": 0.005},
+            )
+        )
+
+
 class JawLateralFacingForwardGateTests(unittest.TestCase):
     def test_a_jaw_slide_fires_while_facing_forward(self) -> None:
         state = drive(machine(), jaw_lateral=0.060)

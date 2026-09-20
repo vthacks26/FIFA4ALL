@@ -491,6 +491,73 @@ class BlinkRejectionTests(unittest.TestCase):
             ControlThresholds(eye_open_fraction=1.0)
 
 
+class TiltOcclusionTests(unittest.TestCase):
+    """A head tilt or turn that covers an eye must not count as a wink."""
+
+    EYE_REST = 0.11
+
+    def calibrated(self) -> ControlStateMachine:
+        state = ControlStateMachine()
+        state.calibrate(CENTER, eye_rest=self.EYE_REST)
+        return state
+
+    def eyes(
+        self,
+        left: float,
+        right: float,
+        *,
+        head_tilt: float = 0.0,
+        head_turn: float = 0.0,
+    ) -> dict[str, float]:
+        return {
+            "mouth_opening": 0.0,
+            "left_wink": right - left,
+            "left_eye_opening": left,
+            "right_eye_opening": right,
+            "head_tilt": head_tilt,
+            "head_turn": head_turn,
+        }
+
+    def test_a_tilt_covered_eye_does_not_fire_a_pass(self) -> None:
+        """One eye collapsed by roll looks like a wink; pose says it is not."""
+
+        result = self.calibrated().update(
+            nose=CENTER,
+            features=self.eyes(0.005, 0.11, head_tilt=40.0),
+            tracking_valid=True,
+            now=0.0,
+        )
+        self.assertFalse(result["wink"]["fired"])
+        self.assertFalse(result["wink"]["active"])
+        self.assertIsNone(result["wink"]["eye"])
+
+    def test_a_yaw_covered_eye_does_not_fire_a_pass(self) -> None:
+        result = self.calibrated().update(
+            nose=CENTER,
+            features=self.eyes(0.11, 0.005, head_turn=0.22),
+            tracking_valid=True,
+            now=0.0,
+        )
+        self.assertFalse(result["wink"]["fired"])
+        self.assertFalse(result["wink"]["active"])
+
+    def test_a_frontal_wink_still_fires(self) -> None:
+        """A small seated tilt is still a wink, not an occluded eye."""
+
+        result = self.calibrated().update(
+            nose=CENTER,
+            features=self.eyes(0.005, 0.11, head_tilt=8.0, head_turn=0.03),
+            tracking_valid=True,
+            now=0.0,
+        )
+        self.assertTrue(result["wink"]["fired"])
+        self.assertEqual(result["wink"]["eye"], "left")
+
+    def test_wink_max_tilt_must_be_positive(self) -> None:
+        with self.assertRaises(ValueError):
+            ControlThresholds(wink_max_tilt=0.0)
+
+
 class TrackingLossTests(unittest.TestCase):
     def test_tracking_loss_releases_all_movement_keys(self) -> None:
         state = machine()
@@ -557,6 +624,8 @@ class StateContractTests(unittest.TestCase):
         self.assertIn("mouth_open", published)
         self.assertIn("brow_on", published)
         self.assertIn("brow_off", published)
+        self.assertEqual(published["wink_max_tilt"], 25.0)
+        self.assertEqual(published["wink_max_turn"], 0.140)
 
     def test_hold_labels_include_space_and_l(self) -> None:
         state = machine().update(
