@@ -55,7 +55,7 @@ export function Live({ channel, onRestart }: LiveProps) {
           state={state}
           thresholds={config.thresholds}
           hasVideo={config.has_video}
-          size={390}
+          expand
         />
 
         <div className="live__panels">
@@ -164,7 +164,7 @@ export function Live({ channel, onRestart }: LiveProps) {
         </div>
         <p className="deadzone-switch__hint">
           {deadzoneMode === "follow"
-            ? "Further look pulls the zone. A small opposite move stops."
+            ? "Past the outer ring the zone follows. Between the rings, WASD stays held."
             : "Return to your calibrated center to release WASD."}
         </p>
         <button

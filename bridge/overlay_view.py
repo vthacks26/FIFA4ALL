@@ -47,8 +47,14 @@ def draw_overlay(cv2: Any, frame: Any, state: Mapping[str, object], thresholds: 
             int(thresholds.exit_radius * width),
             int(thresholds.exit_radius / thresholds.y_scale * height),
         )
+        follow_axes = (
+            max(1, int(thresholds.follow_radius * width)),
+            max(1, int(thresholds.follow_radius / thresholds.y_scale * height)),
+        )
         moving = state.get("direction") is not None
+        following = state.get("deadzone_mode") == "follow"
         cv2.ellipse(view, centre, axes, 0, 0, 360, GREY if moving else LIME, 2)
+        cv2.ellipse(view, centre, follow_axes, 0, 0, 360, LIME if following else GREY, 2)
         cv2.drawMarker(view, centre, GREY, cv2.MARKER_CROSS, 14, 1)
 
         keys = state.get("keys")

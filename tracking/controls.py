@@ -70,6 +70,10 @@ class ControlThresholds:
 
     enter_radius: float = 0.045
     exit_radius: float = 0.062
+    # Follow-mode outer ring. Must sit beyond the inner deadzone and the
+    # WASD chips (those are drawn at 2.1 * exit_radius ≈ 0.130). The zone
+    # only drags when the nose is outside this radius.
+    follow_radius: float = 0.170
     y_scale: float = 1.15
     # Degrees a held direction keeps past its 45-degree zone before handing
     # over. Without this the nose resting on a boundary flaps between, say, N
@@ -131,6 +135,8 @@ class ControlThresholds:
             raise ValueError("enter_radius must be positive")
         if self.exit_radius <= self.enter_radius:
             raise ValueError("exit_radius must be larger than enter_radius")
+        if self.follow_radius <= self.exit_radius:
+            raise ValueError("follow_radius must be larger than exit_radius")
         if self.mouth_reset >= self.mouth_open:
             raise ValueError("mouth_reset must be below mouth_open")
         if self.mouth_rest_clearance <= 0:
@@ -164,6 +170,7 @@ class ControlThresholds:
         return {
             "enter_radius": self.enter_radius,
             "exit_radius": self.exit_radius,
+            "follow_radius": self.follow_radius,
             "y_scale": self.y_scale,
             "angle_margin": self.angle_margin,
             "recentre_seconds": self.recentre_seconds,
@@ -331,18 +338,24 @@ class ControlStateMachine:
         return (nose[0] - self.center[0], nose[1] - self.center[1])
 
     def _follow_deadzone(self, nose: tuple[float, float]) -> tuple[float, float]:
-        """Drag the deadzone so further look stays just outside it.
+        """Keep the nose on the outer follow ring; do not glue the deadzone.
 
-        Once the nose clears `exit_radius`, extra travel pulls `center` along
-        so a short opposite move returns inside `enter_radius`. Home — the
-        last calibrate / auto-recentre — is left alone until the next reset.
+        Three bands, all measured from the current `center`:
+
+        - ``|offset| <= enter/exit deadzone``: release WASD (hysteresis).
+        - ``deadzone < |offset| <= follow_radius``: hold the current direction
+          and leave `center` where it is. A small move back from the outer
+          edge still moves the character.
+        - ``|offset| > follow_radius``: slide `center` so the nose sits on
+          the outer circle. Home — last calibrate / auto-recentre — is left
+          alone until the next reset.
         """
 
         if self.center is None:
             return (0.0, 0.0)
         offset = self._offset_from_center(nose)
         radius = hypot(offset[0], offset[1] * self.thresholds.y_scale)
-        limit = self.thresholds.exit_radius
+        limit = self.thresholds.follow_radius
         if radius <= limit:
             return offset
         scale = limit / radius

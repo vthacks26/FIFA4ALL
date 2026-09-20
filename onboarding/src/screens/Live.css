@@ -40,16 +40,18 @@
 
 .live__stage {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: clamp(22px, 3.5vw, 52px);
   flex: 1;
+  min-height: 0;
 }
 
 .live__panels {
-  flex: 1;
+  flex: 0.85 1 260px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-width: 0;
 }
 
 .live-row {

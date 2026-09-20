@@ -627,7 +627,8 @@ def main(argv: list[str] | None = None) -> int:
         default="fixed",
         help=(
             "fixed (default): deadzone stays on the calibrated center. "
-            "follow: further look pulls the deadzone so a small opposite move stops. "
+            "follow: the zone only follows when the nose is on/past the outer "
+            "ring; between that ring and the inner deadzone WASD stays held. "
             "The overlay FIXED/FOLLOW switch can still change this at runtime."
         ),
     )

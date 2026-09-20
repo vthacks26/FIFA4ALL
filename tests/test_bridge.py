@@ -97,6 +97,7 @@ class BridgeServerTests(unittest.TestCase):
             config = json.loads(response.read())
         self.assertEqual(config["thresholds"]["enter_radius"], self.source.thresholds.enter_radius)
         self.assertEqual(config["thresholds"]["exit_radius"], self.source.thresholds.exit_radius)
+        self.assertEqual(config["thresholds"]["follow_radius"], self.source.thresholds.follow_radius)
 
     def test_config_publishes_the_direction_key_mapping(self) -> None:
         with urllib.request.urlopen(self.url("/config"), timeout=5) as response:
@@ -161,7 +162,7 @@ class BridgeServerTests(unittest.TestCase):
         self.assertIn("deadzone_mode", str(body.get("error", "")))
         self.assertEqual(self.source.machine.deadzone_mode, "fixed")
 
-    def test_follow_deadzone_releases_injected_keys_on_a_short_return(self) -> None:
+    def test_follow_deadzone_holds_keys_on_a_short_return_from_the_outer_ring(self) -> None:
         """Website toggle must change the same machine InputSession reads."""
 
         self.hub.session.arm()
@@ -170,7 +171,7 @@ class BridgeServerTests(unittest.TestCase):
             post(self.url("/deadzone-mode"), {"mode": "follow"})
             post(
                 self.url("/mock"),
-                {"tracking": True, "nose": {"x": 0.20, "y": 0.0}, "mouth": 0.0, "wink": 0.0},
+                {"tracking": True, "nose": {"x": 0.28, "y": 0.0}, "mouth": 0.0, "wink": 0.0},
             )
             far = self.read_one_event()
             self.assertEqual(far["keys"], ["D"])
@@ -178,7 +179,15 @@ class BridgeServerTests(unittest.TestCase):
 
             post(
                 self.url("/mock"),
-                {"tracking": True, "nose": {"x": 0.17, "y": 0.0}, "mouth": 0.0, "wink": 0.0},
+                {"tracking": True, "nose": {"x": 0.24, "y": 0.0}, "mouth": 0.0, "wink": 0.0},
+            )
+            held = self.read_one_event()
+            self.assertEqual(held["keys"], ["D"])
+            self.assertIn("D", self.keyboard.held)
+
+            post(
+                self.url("/mock"),
+                {"tracking": True, "nose": {"x": 0.11, "y": 0.0}, "mouth": 0.0, "wink": 0.0},
             )
             released = self.read_one_event()
             self.assertEqual(released["keys"], [])
@@ -539,6 +548,8 @@ class OverlayStaysSeparateTests(unittest.TestCase):
         self.assertIn('"RESET"', overlay)
         self.assertIn('"FIXED"', overlay)
         self.assertIn('"FOLLOW"', overlay)
+        self.assertIn("follow_radius", overlay)
+        self.assertIn("follow_axes", overlay)
         self.assertIn('"NO FACE"', overlay)
         self.assertIn('"FIFA4ALL"', overlay)
 
@@ -583,14 +594,21 @@ class OverlayDeadzoneSwitchTests(unittest.TestCase):
         self.assertEqual(source.machine.deadzone_mode, "follow")
 
         far = source.machine.update(
-            nose=(0.70, 0.50), features={}, tracking_valid=True
+            nose=(0.78, 0.50), features={}, tracking_valid=True
         )
         session.apply(far)
         self.assertEqual(far["keys"], ["D"])
         self.assertIn("D", keyboard.held)
 
+        still = source.machine.update(
+            nose=(0.74, 0.50), features={}, tracking_valid=True
+        )
+        session.apply(still)
+        self.assertEqual(still["keys"], ["D"])
+        self.assertIn("D", keyboard.held)
+
         released = source.machine.update(
-            nose=(0.67, 0.50), features={}, tracking_valid=True
+            nose=(source.machine.center[0] + 0.02, 0.50), features={}, tracking_valid=True
         )
         session.apply(released)
         self.assertEqual(released["keys"], [])
@@ -701,8 +719,24 @@ class OrientationCameraFeedTests(unittest.TestCase):
         self.assertIn("src={`${BRIDGE_URL}/stream.mjpg`}", frame)
         self.assertIn("hasVideo={config.has_video}", center)
         self.assertIn('"http://127.0.0.1:8765"', source)
+        self.assertIn("expand", frame)
         self.assertNotIn("navigator.mediaDevices", frame)
         self.assertNotIn("getUserMedia(", frame)
+
+    def test_live_hud_camera_is_large_and_in_color(self) -> None:
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parent.parent
+        live = (root / "onboarding" / "src" / "screens" / "Live.tsx").read_text(
+            encoding="utf-8"
+        )
+        css = (root / "onboarding" / "src" / "components" / "CameraFrame.css").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("expand", live)
+        self.assertIn("camera--expand", css)
+        self.assertNotIn("grayscale", css)
+        self.assertNotIn("brightness(0.55)", css)
 
     def test_reticle_spans_the_frame_so_it_cannot_cover_the_feed(self) -> None:
         from pathlib import Path
@@ -716,6 +750,9 @@ class OrientationCameraFeedTests(unittest.TestCase):
         )
         self.assertIn("viewBox={`0 0 ${width} ${height}`}", reticle)
         self.assertIn(".reticle * {\n  vector-effect: non-scaling-stroke;\n}", css)
+        self.assertIn("reticle__follow", reticle)
+        self.assertIn("follow_radius", reticle)
+        self.assertIn(".reticle__follow", css)
         self.assertNotIn("width: 0;\n  height: 0;", css)
 
 

@@ -30,6 +30,8 @@ interface CameraFrameProps {
   readonly thresholds: Thresholds;
   readonly hasVideo: boolean;
   readonly size?: number;
+  /** Grow to fill the live HUD stage instead of a fixed thumbnail. */
+  readonly expand?: boolean;
   readonly lockProgress?: number;
   readonly locked?: boolean;
   readonly showKeys?: boolean;
@@ -41,6 +43,7 @@ export function CameraFrame({
   thresholds,
   hasVideo,
   size = 300,
+  expand = false,
   lockProgress = 0,
   locked = false,
   showKeys = true,
@@ -65,8 +68,12 @@ export function CameraFrame({
   const mapping = buildMapping(view, hasVideo ? video : null, state, thresholds);
 
   return (
-    <div className="camera" style={{ width: size }}>
-      <div className="camera__view" ref={viewRef} style={{ height: size * 1.18 }}>
+    <div className={expand ? "camera camera--expand" : "camera"} style={expand ? undefined : { width: size }}>
+      <div
+        className="camera__view"
+        ref={viewRef}
+        style={expand ? undefined : { height: size * 1.18 }}
+      >
         {hasVideo ? (
           <img
             className="camera__video"
