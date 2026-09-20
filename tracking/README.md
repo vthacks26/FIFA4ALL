@@ -123,7 +123,6 @@ The fallback previews only nose movement: forward is no key, nose left/right is 
 
 Testing notes to record on each teammate Mac:
 
-- Mac model and macOS version.
 - Whether the webcam permission prompt appeared and was accepted.
 - Lighting conditions.
 - Camera angle and distance.
