@@ -88,7 +88,7 @@ You do not need to recreate `.venv` or reinstall unless you deleted it.
 | --- | --- | --- |
 | Nose / head look axis (leave the center deadzone) | `W` `A` `S` `D` | Move |
 | Mouth open | `Space` | Shoot (Space after the mouth stays open 200ms; hold while it stays open) |
-| Wink (either eye; blinks rejected) | `L` | Pass (L after the wink stays detected 200ms, same as shoot; hold while it stays detected) |
+| Wink (either eye; blinks rejected; a tilt-covered eye does not pass) | `L` | Pass (L after the wink stays detected 200ms, same as shoot; hold while it stays detected) |
 | Raised eyebrows | — | Temporarily disabled (does not recenter). Use overlay **RESET** or website **Find your center** / **Reset center**. |
 
 The first valid nose point after start or Reset is the joystick center. Combinations are allowed (for example look + shoot).

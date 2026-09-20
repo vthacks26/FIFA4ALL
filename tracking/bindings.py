@@ -81,7 +81,8 @@ class GestureChannel:
             channel needs no resting baseline.
         gate: Named confound gate applied before triggering, or None when the
             channel has no involuntary confound. `one_eye_open` rejects a
-            blink by requiring the other eye to stay open.
+            blink by requiring the other eye to stay open, and rejects a
+            tilt- or turn-covered eye that would otherwise look like a wink.
         selectable: False keeps a channel working without offering it during
             orientation.
     """
@@ -129,6 +130,8 @@ CHANNELS: Mapping[str, GestureChannel] = {
         default_off=0.015,
         use_magnitude=True,
         rest_feature="left_eye_opening",
+        # Blink: the other eye must stay open. Pose: a roll or yaw that
+        # hides one eye is not a wink. Both live in `one_eye_open`.
         gate="one_eye_open",
     ),
     # --- Phase 3 channels -------------------------------------------------

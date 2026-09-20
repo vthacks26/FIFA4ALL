@@ -123,6 +123,13 @@ class ControlThresholds:
     eye_open_fraction: float = 0.65
     # Used until calibration measures the user. Typical open eye reads ~0.10.
     eye_open_floor: float = 0.070
+    # A large roll or yaw hides one eye behind the face or the camera edge.
+    # That collapsed eyelid gap reads as a wink, and the other eye stays
+    # open, so blink rejection cannot tell them apart. A wink is only
+    # accepted while the head stays inside these bands. Seated play sits
+    # around 15 degrees of tilt; covering an eye is well past that.
+    wink_max_tilt: float = 25.0
+    wink_max_turn: float = 0.140
     # Head pitch moves the brow-to-eye gap by a few percent on its own, and
     # pitching is not idle fidgeting in this game: it is the N/S steering axis
     # of the nose joystick. A brow raise is only accepted while pitch is within
@@ -164,6 +171,10 @@ class ControlThresholds:
             raise ValueError("facing_forward_turn must be positive")
         if self.eye_open_floor <= 0:
             raise ValueError("eye_open_floor must be positive")
+        if self.wink_max_tilt <= 0:
+            raise ValueError("wink_max_tilt must be positive")
+        if self.wink_max_turn <= 0:
+            raise ValueError("wink_max_turn must be positive")
         if self.y_scale <= 0:
             raise ValueError("y_scale must be positive")
         if not 0.0 <= self.angle_margin < 22.5:
@@ -194,6 +205,8 @@ class ControlThresholds:
             "brow_off": self.brow_off,
             "eye_open_fraction": self.eye_open_fraction,
             "eye_open_floor": self.eye_open_floor,
+            "wink_max_tilt": self.wink_max_tilt,
+            "wink_max_turn": self.wink_max_turn,
             "pitch_level_band": self.pitch_level_band,
             "facing_forward_turn": self.facing_forward_turn,
             "dwell_seconds": self.dwell_seconds,
@@ -449,8 +462,8 @@ class ControlStateMachine:
         # leaves the difference near zero, so it still does not fire.
         signed_wink = features.get("left_wink")
         wink_value = None if signed_wink is None else abs(signed_wink)
-        if wink_value is not None and not self._one_eye_still_open(features):
-            # Both eyes are closing: this is a blink, not a wink.
+        if wink_value is not None and not self._wink_allowed(features):
+            # A blink, or a pose that hides one eye, not a deliberate wink.
             wink_value = 0.0
         self._wink_eye = (
             None if wink_value == 0.0 else _wink_eye(signed_wink, self.thresholds.wink_off)
@@ -541,8 +554,9 @@ class ControlStateMachine:
         if gate is None:
             return True
         if gate == "one_eye_open":
-            # A blink closes both lids together; a wink leaves one eye open.
-            return self._one_eye_still_open(features)
+            # A blink closes both lids together; a tilt or turn can hide one
+            # eye while the other stays open. Either is not a wink.
+            return self._wink_allowed(features)
         if gate == "head_level":
             pitch = features.get("head_pitch")
             if pitch is None or self.pitch_rest is None:
@@ -598,6 +612,11 @@ class ControlStateMachine:
         _, fired = trigger.update(value, now)
         return _channel_view(trigger, value=value, fired=fired, gated=False, now=now)
 
+    def _wink_allowed(self, features: Mapping[str, float]) -> bool:
+        """True when the reading can be a wink, not a blink or a covered eye."""
+
+        return self._one_eye_still_open(features) and self._face_reasonably_frontal(features)
+
     def _one_eye_still_open(self, features: Mapping[str, float]) -> bool:
         """True when one eye is clearly open, which a blink never satisfies."""
 
@@ -608,6 +627,21 @@ class ControlStateMachine:
             # previous behaviour rather than silently dropping every wink.
             return True
         return max(left, right) >= self.eye_open_gate()
+
+    def _face_reasonably_frontal(self, features: Mapping[str, float]) -> bool:
+        """True when roll/yaw are not large enough to hide an eye.
+
+        Missing pose features keep the previous behaviour: older payloads
+        have no tilt or turn, and must not drop every wink.
+        """
+
+        tilt = features.get("head_tilt")
+        turn = features.get("head_turn")
+        if tilt is not None and abs(tilt) > self.thresholds.wink_max_tilt:
+            return False
+        if turn is not None and abs(turn) > self.thresholds.wink_max_turn:
+            return False
+        return True
 
     def _apply_mouth_thresholds(self) -> None:
         """Lift the mouth thresholds clear of this person's resting value."""
