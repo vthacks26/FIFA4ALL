@@ -1,6 +1,6 @@
 # FIFA4ALL
 
-Play EA Sports FC on Amazon Luna with your face instead of a controller. Look with your head for WASD, open your mouth to shoot (Space hold after 200ms), wink to pass (L hold).
+Play EA Sports FC on Amazon Luna with your face instead of a controller. Look with your head for WASD, open your mouth to shoot (Space hold after 200ms), wink to pass (L hold after 200ms, same as shoot).
 
 This is a VTHacks accessibility hack. The live product on `main` injects macOS Quartz HID key holds into the focused app (Google Chrome running Luna).
 
@@ -88,7 +88,7 @@ You do not need to recreate `.venv` or reinstall unless you deleted it.
 | --- | --- | --- |
 | Nose / head look axis (leave the center deadzone) | `W` `A` `S` `D` | Move |
 | Mouth open | `Space` | Shoot (Space after the mouth stays open 200ms; hold while it stays open) |
-| Wink (either eye; blinks rejected) | `L` | Pass (hold while the wink is detected) |
+| Wink (either eye; blinks rejected) | `L` | Pass (L after the wink stays detected 200ms, same as shoot; hold while it stays detected) |
 | Raised eyebrows | — | Temporarily disabled (does not recenter). Use overlay **RESET** or website **Find your center** / **Reset center**. |
 
 The first valid nose point after start or Reset is the joystick center. Combinations are allowed (for example look + shoot).

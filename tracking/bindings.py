@@ -49,10 +49,14 @@ ACTIONS: Mapping[ActionName, Action] = {
         press_delay_seconds=0.2,
     ),
     # Pass is a hold, not a tap: the wink holds L until the eye opens again.
-    # Changed upstream in "Replace tongue-out reset with eyebrow raise"; the
-    # `tap` trigger stays in the contract because it is still a legitimate
-    # shape for an action, just not one any action uses today.
-    "PASS": Action(name="PASS", key="L", trigger="hold", label="Pass"),
+    # 200ms before L goes down, matching shoot, so a brief wink never starts
+    # a pass. Once down it stays down while the wink is held. The `tap`
+    # trigger stays in the contract because it is still a legitimate shape
+    # for an action, just not one any action uses today.
+    "PASS": Action(
+        name="PASS", key="L", trigger="hold", label="Pass",
+        press_delay_seconds=0.2,
+    ),
 }
 
 
