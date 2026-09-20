@@ -550,7 +550,10 @@ class StateContractTests(unittest.TestCase):
     def test_thresholds_are_publishable_to_the_ui(self) -> None:
         published = ControlThresholds().as_dict()
         self.assertEqual(published["enter_radius"], ControlThresholds().enter_radius)
+        self.assertEqual(published["enter_radius"], 0.029)
+        self.assertEqual(published["exit_radius"], 0.040)
         self.assertEqual(published["follow_radius"], ControlThresholds().follow_radius)
+        self.assertEqual(published["follow_radius"], 0.170)
         self.assertIn("mouth_open", published)
         self.assertIn("brow_on", published)
         self.assertIn("brow_off", published)

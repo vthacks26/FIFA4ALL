@@ -116,8 +116,8 @@ export const IDLE_STATE: ControlState = {
 };
 
 export const DEFAULT_THRESHOLDS: Thresholds = {
-  enter_radius: 0.045,
-  exit_radius: 0.062,
+  enter_radius: 0.029,
+  exit_radius: 0.040,
   follow_radius: 0.170,
   y_scale: 1.15,
   angle_margin: 9.0,

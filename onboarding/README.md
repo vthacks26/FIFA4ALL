@@ -172,7 +172,8 @@ The live website HUD still has a **Deadzone** switch (persisted in
 `POST /deadzone-mode`) if that tab is open.
 
 - **Fixed center** (default): the zone stays on the last calibrate / RESET home.
-  Return into that original zone to release WASD.
+  Return into that original zone to release WASD. Inner enter/exit radii are
+  0.029 / 0.040 (was 0.045 / 0.062), so a shorter look starts movement.
 - **Follow**: two radii. The inner deadzone releases WASD. An outer ring sits
   beyond the WASD chips; the zone only follows when the nose is in that outer
   region (center slides so the nose stays on the ring). Between the rings the
