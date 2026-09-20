@@ -74,10 +74,13 @@ class ControlThresholds:
     reason, and are edge triggered so holding the expression emits one action.
     """
 
-    enter_radius: float = 0.045
-    exit_radius: float = 0.062
+    # Inner WASD deadzone (~35% smaller than 0.045 / 0.062). Still above
+    # typical rest jitter (~recentre_stillness 0.012) so noise does not
+    # start movement.
+    enter_radius: float = 0.029
+    exit_radius: float = 0.040
     # Follow-mode outer ring. Must sit beyond the inner deadzone and the
-    # WASD chips (those are drawn at 2.1 * exit_radius ≈ 0.130). The zone
+    # WASD chips (those are drawn at 2.1 * exit_radius ≈ 0.084). The zone
     # only drags when the nose is outside this radius.
     follow_radius: float = 0.170
     y_scale: float = 1.15
